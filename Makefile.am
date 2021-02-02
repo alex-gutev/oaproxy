@@ -1,8 +1,8 @@
-bin_PROGRAMS = goaproxy
+bin_PROGRAMS = oaproxy
 
-goaproxy_LDADD = $(GOA_LIBS)
-goaproxy_CFLAGS = $(GOA_CFLAGS)
+oaproxy_LDADD = $(GOA_LIBS)
+oaproxy_CFLAGS = $(GOA_CFLAGS)
 
-goaproxy_SOURCES = src/main.c \
+oaproxy_SOURCES = src/main.c \
 	src/b64.c \
 	src/xoauth2.c
