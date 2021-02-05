@@ -13,6 +13,7 @@ PKG_PROG_PKG_CONFIG
 # Libraries
 
 PKG_CHECK_MODULES([GOA], [goa-1.0])
+PKG_CHECK_MODULES([OPENSSL], [openssl])
 
 # Output
 

@@ -11,6 +11,10 @@
 #include <netdb.h>
 #include <unistd.h>
 
+#include <openssl/bio.h>
+#include <openssl/ssl.h>
+#include <openssl/err.h>
+
 #define RECV_BUF_SIZE 1024
 
 /**
@@ -46,6 +50,16 @@ static void handle_smtp_client(int fd);
  * @param len Number of bytes in client response
  */
 static smtp_command smtp_parse_command(char *response, size_t len);
+
+/**
+ * Initialize the OpenSSL library.
+ */
+static void initialize_ssl();
+
+/**
+ * Free the OpenSSL library.
+ */
+static void destroy_ssl();
 int main(int argc, char *argv[])
 {
     if (argc < 1) {
@@ -61,9 +75,29 @@ int main(int argc, char *argv[])
         return -1;
     }
 
+    initialize_ssl();
     run_server(port);
+    destroy_ssl();
+
     return 0;
 }
+
+/* OpenSSL Utilities */
+
+void initialize_ssl() {
+    SSL_load_error_strings();
+    ERR_load_crypto_strings();
+
+    OpenSSL_add_all_algorithms();
+    SSL_library_init();
+}
+
+void destroy_ssl() {
+    ERR_free_strings();
+    EVP_cleanup();
+}
+
+
 /* Local SMTP Server */
 
 void run_server(int port) {
@@ -103,36 +137,102 @@ void run_server(int port) {
 
 void handle_smtp_client(int fd) {
     char buf[RECV_BUF_SIZE];
+    char s_data[RECV_BUF_SIZE];
+    char c_data[RECV_BUF_SIZE];
 
-    ssize_t sz = 0;
+    ssize_t s_n = 0, c_n = 0;
 
-    while ((sz = recv(fd, buf, RECV_BUF_SIZE, 0))) {
-        if (sz < 0 && errno != EINTR) {
-            perror("Error receiving data");
+    // Connect to SMTP server
+
+    SSL_CTX *ctx = SSL_CTX_new(SSLv23_client_method());
+    if (ctx == NULL) {
+        fputs("Error loading SSL context\n", stderr);
+        ERR_print_errors_fp(stderr);
+        exit(EXIT_FAILURE);
+    }
+
+    BIO *bio = BIO_new_ssl_connect(ctx);
+    SSL *ssl;
+
+    BIO_get_ssl(bio, &ssl);
+    SSL_set_mode(ssl, SSL_MODE_AUTO_RETRY);
+
+    BIO_set_conn_hostname(bio, "smtp.gmail.com:465");
+
+    if (BIO_do_connect(bio) <= 0) {
+        BIO_free_all(bio);
+        fputs("Error connecting to server\n", stderr);
+        ERR_print_errors_fp(stderr);
+        exit(EXIT_FAILURE);
+    }
+
+    BIO_set_nbio(bio, 1);
+
+    int bfd = BIO_get_fd(bio, NULL);
+    int maxfd = fd < bfd ? bfd : fd;
+
+
+    while (1) {
+        fd_set rfds;
+
+        FD_ZERO(&rfds);
+        FD_SET(fd, &rfds);
+        FD_SET(bfd, &rfds);
+
+        int retval = select(maxfd+1, &rfds, NULL, NULL, NULL);
+
+        if (retval <= 0) {
+            perror("select()");
             break;
         }
 
-        smtp_command cmd = smtp_parse_command(buf, sz);
+        if (FD_ISSET(bfd, &rfds)) {
+            s_n = BIO_read(bio, s_data, sizeof(s_data));
 
-        switch (cmd) {
-        case SMTP_AUTH:
-            printf("Received AUTH command\n");
-            break;
+            if (s_n < 0) {
+                BIO_free_all(bio);
+                fputs("Error reading data from server\n", stderr);
+                ERR_print_errors_fp(stderr);
+                exit(EXIT_FAILURE);
+            }
+            else if (s_n == 0) {
+                break;
+            }
 
-        case SMTP_QUIT:
-            printf("Received QUIT command\n");
-            goto close;
-            break;
+            c_n = send(fd, s_data, s_n, 0);
 
-        default:
-            buf[sz] = 0;
-            printf("Received %ld bytes: %s\n", sz, buf);
+            if (c_n < 0) {
+                perror("Error sending data to client");
+                exit(EXIT_FAILURE);
+            }
+        }
+        else if (FD_ISSET(fd, &rfds)) {
+            c_n = recv(fd, c_data, sizeof(c_data), 0);
+
+            if (c_n < 0) {
+                perror("Error reading data from client");
+                exit(EXIT_FAILURE);
+            }
+            else if (c_n == 0) {
+                break;
+            }
+
+            s_n = BIO_write(bio, c_data, c_n);
+
+            if (s_n < 0) {
+                BIO_free_all(bio);
+                fputs("Error reading data from server\n", stderr);
+                ERR_print_errors_fp(stderr);
+                exit(EXIT_FAILURE);
+            }
         }
     }
 
 close:
 
     printf("Connection Closed\n");
+
+    BIO_free_all(bio);
     close(fd);
 }
 
