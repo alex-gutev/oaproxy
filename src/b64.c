@@ -2,8 +2,21 @@
 
 #include <stdlib.h>
 #include <string.h>
+#include <stdbool.h>
+#include <assert.h>
 
 static const char *b64_alphabet = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
+
+/**
+ * Convert a base64 alphabet character to the corresponding 6 data
+ * bits.
+ *
+ * @param chr Base64 Character
+ *
+ * @return Data bits. -1 if the character is not a valid base64
+ *   alphabet character.
+ */
+static unsigned char char_to_index(char chr);
 
 char *base64_encode(const char *data, size_t size) {
     char * out = malloc(size * 4);
@@ -57,4 +70,61 @@ char *base64_encode(const char *data, size_t size) {
     out = realloc(out, pos);
 
     return out;
+}
+
+char *base64_decode(const char *data, size_t *size) {
+    size_t n = *size;
+    unsigned char *out = malloc(n * 4);
+
+    int state = 0;
+    size_t pos = 0;
+
+    while (n--) {
+        char chr = *data++;
+
+        if (chr == '=') break;
+        unsigned char index = char_to_index(chr);
+
+        switch (state) {
+        case 0:
+            out[pos] = index << 2;
+            state = 1;
+            break;
+
+        case 1:
+            out[pos++] |= (index >> 4);
+            out[pos] = (index << 4);
+            state = 2;
+            break;
+
+        case 2:
+            out[pos++] |= (index >> 2);
+            out[pos] = (index << 6);
+            state = 3;
+            break;
+
+        case 3:
+            out[pos++] |= index;
+            state = 0;
+            break;
+        }
+    }
+
+    *size = pos;
+    return out;
+}
+
+unsigned char char_to_index(char chr) {
+    if ('A' <= chr && chr <= 'Z')
+        return chr - 'A';
+    else if ('a' <= chr && chr <= 'z')
+        return 26 + (chr - 'a');
+    else if ('0' <= chr && chr <= '9')
+        return 52 + (chr - '0');
+    else if (chr == '+')
+        return 62;
+    else if (chr == '/')
+        return 63;
+
+    return -1;
 }
