@@ -28,7 +28,7 @@ void destroy_ssl(void) {
 }
 
 void ssl_log_error(const char *msg) {
-    syslog(LOG_USER | LOG_ERR, "%s", msg);
+    if (msg) syslog(LOG_USER | LOG_ERR, "%s", msg);
     ERR_print_errors_cb(ssl_log_error_cb, NULL);
 }
 
