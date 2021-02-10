@@ -8,4 +8,5 @@ oaproxy_SOURCES = src/main.c \
 	src/xoauth2.c \
 	src/ssl.c \
 	src/gaccounts.c \
-	src/smtp.c
+	src/smtp.c \
+	src/smtp_reply.c
