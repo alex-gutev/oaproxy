@@ -7,6 +7,7 @@
 #include <stdio.h>
 #include <string.h>
 #include <syslog.h>
+#include <assert.h>
 
 #include <sys/types.h>
 #include <sys/socket.h>
@@ -21,7 +22,9 @@
 #include "b64.h"
 #include "xoauth2.h"
 
-#define RECV_BUF_SIZE 1024
+#include "smtp_reply.h"
+
+#define RECV_BUF_SIZE 512 * 4
 
 #define CMD_AUTH_PLAIN "AUTH PLAIN"
 #define CMD_AUTH_PLAIN_LEN 10
@@ -183,11 +186,11 @@ static bool smtp_client_send(int fd, const char *data, size_t n);
  * Read and handle the SMTP response from the server.
  *
  * @param c_fd Client socket file descriptor
- * @param bio Server BIO object
+ * @param stream SMTP reply stream
  *
  * @return True if successful, False otherwise.
  */
-static bool smtp_server_handle_response(int c_fd, BIO *bio);
+static bool smtp_server_handle_reply(int c_fd, struct smtp_reply_stream *stream);
 
 
 /* Implementation */
@@ -221,6 +224,9 @@ void smtp_handle_client(int c_fd, const char *host) {
     struct smtp_client_state client_state;
     client_state.in_data = false;
 
+    struct smtp_reply_stream s_stream;
+    smtp_reply_stream_init(&s_stream, bio);
+
     while (1) {
         fd_set rfds;
 
@@ -236,7 +242,7 @@ void smtp_handle_client(int c_fd, const char *host) {
         }
 
         if (FD_ISSET(s_fd, &rfds)) {
-            if (!smtp_server_handle_response(c_fd, bio))
+            if (!smtp_server_handle_reply(c_fd, &s_stream))
                 break;
         }
         else if (FD_ISSET(c_fd, &rfds)) {
@@ -481,18 +487,34 @@ bool smtp_client_send(int fd, const char *data, size_t n) {
 
 /* Handle SMTP server response */
 
-bool smtp_server_handle_response(int c_fd, BIO *s_bio) {
-    char s_data[RECV_BUF_SIZE];
-    ssize_t s_n = BIO_read(s_bio, s_data, sizeof(s_data));
+bool smtp_server_handle_reply(int c_fd, struct smtp_reply_stream *stream) {
+    struct smtp_reply reply;
+    reply.last = false;
 
-    if (s_n < 0) {
-        ssl_log_error("Error reading SMTP server response");
-        return false;
-    }
-    else if (s_n == 0) {
-        syslog(LOG_USER | LOG_NOTICE, "SMTP server closed connection");
-        return false;
+    while (!reply.last) {
+        if (smtp_reply_next(stream, &reply) <= 0)
+            return false;
+
+        smtp_reply_parse(&reply);
+
+        switch (reply.type) {
+        case SMTP_REPLY_AUTH: {
+            char data[255];
+
+            int sz = snprintf(data, sizeof(data), "%d%cAUTH PLAIN\r\n", reply.code, reply.last ? ' ' : '-');
+            assert(sz > 0 && sz < sizeof(data));
+
+            if (!smtp_client_send(c_fd, data, sz))
+                return false;
+        } break;
+
+        default:
+            if (!smtp_client_send(c_fd, reply.data, reply.total_len))
+                return false;
+
+            break;
+        }
     }
 
-    return smtp_client_send(c_fd, s_data, s_n);
+    return true;
 }
