@@ -50,10 +50,15 @@ struct smtp_cmd {
     /** Command Type Code */
     smtp_cmd_type command;
 
+    /** Pointer to start of command data line */
+    const char *line;
+    /** Length of entire command data line */
+    size_t total_len;
+
     /** Data following command */
     const char *data;
     /** Data length */
-    size_t len;
+    size_t data_len;
 };
 
 /**

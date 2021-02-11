@@ -80,6 +80,9 @@ ssize_t smtp_cmd_next(struct smtp_cmd_stream *stream, struct smtp_cmd *cmd) {
 
     stream->size = n;
 
+    cmd->line  = stream->data;
+    cmd->total_len = n;
+
     if (!stream->in_data) {
         parse_cmd(stream, cmd);
         stream->in_data = cmd->command == SMTP_CMD_DATA;
@@ -122,7 +125,7 @@ bool parse_cmd(struct smtp_cmd_stream *stream, struct smtp_cmd *command) {
 
         command->command = SMTP_CMD_AUTH;
         command->data = cmd_data_start(stream->data + CMD_AUTH_PLAIN_LEN, stream->size - CMD_AUTH_PLAIN_LEN);
-        command->len = cmd_data_len(command->data, (stream->data + stream->size) - command->data);
+        command->data_len = cmd_data_len(command->data, (stream->data + stream->size) - command->data);
 
         return true;
     }
@@ -137,12 +140,12 @@ bool parse_cmd(struct smtp_cmd_stream *stream, struct smtp_cmd *command) {
 
         command->command = SMTP_CMD_DATA;
         command->data = NULL;
-        command->len = 0;
+        command->data_len = 0;
     }
 
     command->command = SMTP_CMD;
     command->data = NULL;
-    command->len = 0;
+    command->data_len = 0;
 
     return true;
 }

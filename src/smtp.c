@@ -189,7 +189,7 @@ bool smtp_client_handle_cmd(struct smtp_cmd_stream *stream, BIO *s_bio) {
 
     switch (cmd.command) {
     case SMTP_CMD_AUTH: {
-        char *user = smtp_parse_auth_user(cmd.data, cmd.len);
+        char *user = smtp_parse_auth_user(cmd.data, cmd.data_len);
 
         if (user) {
             GList *accounts = goa_client_get_accounts(get_goaclient(NULL));
@@ -212,7 +212,7 @@ bool smtp_client_handle_cmd(struct smtp_cmd_stream *stream, BIO *s_bio) {
     }
 
     default:
-        return smtp_server_send(s_bio, stream->data, c_n);
+        return smtp_server_send(s_bio, cmd.line, cmd.total_len);
     }
 
     return true;
