@@ -6,30 +6,10 @@
 
 #include <unistd.h>
 
-#define OAP_CMD_BUF_SIZE 1024
-
 /**
  * Stream of SMTP client commands
  */
-struct smtp_cmd_stream {
-    /* File descriptor */
-    int fd;
-
-    /**
-     * True if sending message data. False if sending SMTP commands.
-     */
-    bool in_data;
-
-    /**
-     * Size of SMTP command.
-     */
-    size_t size;
-
-    /**
-     * Buffer into which SMTP command is read.
-     */
-    char data[OAP_CMD_BUF_SIZE];
-};
+struct smtp_cmd_stream;
 
 /**
  * SMTP Command Type Codes
@@ -62,12 +42,29 @@ struct smtp_cmd {
 };
 
 /**
- * Initialize SMTP command stream.
+ * Create an SMTP command stream.
  *
- * @param stream Pointer to smtp_cmd_stream struct.
- * @param fd Client socket file descriptor.
+ * @param fd SMTP client socket file descriptor
+ *
+ * @return Pointer to the smtp_cmd_stream struct
  */
-void smtp_cmd_stream_init(struct smtp_cmd_stream *stream, int fd);
+struct smtp_cmd_stream * smtp_cmd_stream_create(int fd);
+
+/**
+ * Free the memory held by an SMTP command stream.
+ *
+ * @param stream Pointer to SMTP command stream.
+ */
+void smtp_cmd_stream_free(struct smtp_cmd_stream *stream);
+
+/**
+ * Return the socket file descriptor of an SMTP command stream.
+ *
+ * @param stream Pointer to SMTP command stream.
+ *
+ * @return socket file descriptor
+ */
+int smtp_cmd_stream_fd(struct smtp_cmd_stream *stream);
 
 /**
  * Read and parse the next command from the command stream.

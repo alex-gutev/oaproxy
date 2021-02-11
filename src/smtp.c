@@ -134,9 +134,7 @@ void smtp_handle_client(int c_fd, const char *host) {
     int s_fd = BIO_get_fd(bio, NULL);
     int maxfd = c_fd < s_fd ? s_fd : c_fd;
 
-    struct smtp_cmd_stream c_stream;
-    smtp_cmd_stream_init(&c_stream, c_fd);
-
+    struct smtp_cmd_stream * c_stream = smtp_cmd_stream_create(c_fd);
     struct smtp_reply_stream * s_stream = smtp_reply_stream_create(bio);
 
     while (1) {
@@ -158,11 +156,12 @@ void smtp_handle_client(int c_fd, const char *host) {
                 break;
         }
         else if (FD_ISSET(c_fd, &rfds)) {
-            if (!smtp_client_handle_cmd(&c_stream, bio))
+            if (!smtp_client_handle_cmd(c_stream, bio))
                 break;
         }
     }
 
+    smtp_cmd_stream_free(c_stream);
     smtp_reply_stream_free(s_stream);
 
 close_server:
@@ -197,7 +196,7 @@ bool smtp_client_handle_cmd(struct smtp_cmd_stream *stream, BIO *s_bio) {
             GList *account = find_goaccount(accounts, user);
 
             if (account) {
-                bool auth = smtp_auth_client(stream->fd, s_bio, account, user);
+                bool auth = smtp_auth_client(smtp_cmd_stream_fd(stream), s_bio, account, user);
 
                 free(user);
                 g_list_free_full(accounts, (GDestroyNotify)g_object_unref);

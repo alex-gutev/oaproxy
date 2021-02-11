@@ -1,17 +1,43 @@
 #include "smtp_cmd.h"
 
+#include <stdlib.h>
 #include <string.h>
 #include <syslog.h>
 #include <stdio.h>
+#include <assert.h>
 
 #include <sys/types.h>
 #include <sys/socket.h>
+
+#include "xmalloc.h"
+
+#define OAP_CMD_BUF_SIZE 1024
 
 #define CMD_AUTH_PLAIN "AUTH PLAIN"
 #define CMD_AUTH_PLAIN_LEN 10
 
 #define CMD_DATA "DATA"
 #define CMD_DATA_LEN 4
+
+struct smtp_cmd_stream {
+    /* File descriptor */
+    int fd;
+
+    /**
+     * True if sending message data. False if sending SMTP commands.
+     */
+    bool in_data;
+
+    /**
+     * Size of SMTP command.
+     */
+    size_t size;
+
+    /**
+     * Buffer into which SMTP command is read.
+     */
+    char data[OAP_CMD_BUF_SIZE];
+};
 
 /**
  * Read an SMTP command from the client.
@@ -63,11 +89,24 @@ static size_t cmd_data_len(const char *data, size_t size);
 
 /* Implementations */
 
-void smtp_cmd_stream_init(struct smtp_cmd_stream *stream, int fd) {
+struct smtp_cmd_stream * smtp_cmd_stream_create(int fd) {
+    struct smtp_cmd_stream *stream = xmalloc(sizeof(struct smtp_cmd_stream));
+
     stream->fd = fd;
     stream->size = 0;
 
     stream->in_data = false;
+
+    return stream;
+}
+
+void smtp_cmd_stream_free(struct smtp_cmd_stream *stream) {
+    assert(stream != NULL);
+    free(stream);
+}
+
+int smtp_cmd_stream_fd(struct smtp_cmd_stream *stream) {
+    return stream->fd;
 }
 
 ssize_t smtp_cmd_next(struct smtp_cmd_stream *stream, struct smtp_cmd *cmd) {
