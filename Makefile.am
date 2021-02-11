@@ -9,4 +9,5 @@ oaproxy_SOURCES = src/main.c \
 	src/ssl.c \
 	src/gaccounts.c \
 	src/smtp.c \
-	src/smtp_reply.c
+	src/smtp_reply.c \
+	src/smtp_cmd.c

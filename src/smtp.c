@@ -23,112 +23,25 @@
 #include "xoauth2.h"
 
 #include "smtp_reply.h"
+#include "smtp_cmd.h"
 
 #define RECV_BUF_SIZE 512 * 4
-
-#define CMD_AUTH_PLAIN "AUTH PLAIN"
-#define CMD_AUTH_PLAIN_LEN 10
-
-#define CMD_DATA "DATA"
-#define CMD_DATA_LEN 4
-
-/**
- * SMTP State.
- *
- * Keeps track of whether in Data or command state.
- */
-struct smtp_client_state {
-    /* True when in Data state */
-    bool in_data;
-};
-
-/**
- * SMTP Command ID Constants
- */
-typedef enum smtp_command_type {
-    /* Generic Command */
-    SMTP_CMD = 0,
-    /* AUTH - Authorization Command */
-    SMTP_AUTH = 1,
-    /* QUIT - End Session Command */
-    SMTP_DATA
-} smtp_command_type;
-
-/**
- * SMTP Command
- */
-struct smtp_command {
-    /** Command */
-    smtp_command_type command;
-    /** Command data (following command) */
-    const char *data;
-    /** Command data length */
-    size_t len;
-};
 
 /* Handling SMTP Client Command */
 
 /**
  * Read and handle/forward an SMTP command from the client.
  *
- * @param state SMTP client state
- * @param c_fd Client socket file descriptor
+ * @param stream SMTP command stream
  * @param s_bio Server BIO object
  *
  * @return true if the command was handled successfully, false
  *   otherwsie.
  */
-static bool smtp_client_handle_cmd(struct smtp_client_state *state, int c_fd, BIO *s_bio);
-
-/**
- * Read an SMTP command from the client.
- *
- * @param c_fd Client socket file descriptor
- * @param buf Buffer in which to read command
- * @param n Buffer size
- *
- * @return Number of bytes read. -1 if an error occurred.
- */
-static ssize_t smtp_read_client_cmd(int c_fd, char *buf, size_t n);
+static bool smtp_client_handle_cmd(struct smtp_cmd_stream *stream, BIO *s_bio);
 
 
 /* Command Parsing */
-
-/**
- * Parse an SMTP command from the client response.
- *
- * @param state SMTP client state
- *
- * @param response Client response
- *
- * @param len Number of bytes in client response
- *
- * @param command Pointer to smtp_command struct. Filled with command
- *   data on output.
- *
- * @return True if command was parsed successfully.
- */
-static bool smtp_parse_command(struct smtp_client_state *state, const char *response, size_t len, struct smtp_command *command);
-
-/**
- * Find the start of the command auxiliary data.
- *
- * @param data Pointer to first byte following command.
- * @param size Number of bytes in data.
- *
- * @return Pointer to first data byte.
- */
-static const char *smtp_command_data_start(const char *data, size_t size);
-
-/**
- * Determine the number of bytes comprising the auxiliary data.
- *
- * @param data Pointer to command data.
- * @param size Number of bytes of remaining response data.
- *
- * @return Number of bytes which comprising command data.
- */
-static size_t smtp_command_data_len(const char *data, size_t size);
 
 /**
  * Parse the username from an SMTP plain auth command.
@@ -138,7 +51,7 @@ static size_t smtp_command_data_len(const char *data, size_t size);
  *
  * @return Username
  */
-static const char * smtp_parse_auth_user(const char *data, size_t n);
+static char * smtp_parse_auth_user(const char *data, size_t n);
 
 /**
  * Authenticate the client by sending the AUTH (using XOAUTH2) command
@@ -221,8 +134,8 @@ void smtp_handle_client(int c_fd, const char *host) {
     int s_fd = BIO_get_fd(bio, NULL);
     int maxfd = c_fd < s_fd ? s_fd : c_fd;
 
-    struct smtp_client_state client_state;
-    client_state.in_data = false;
+    struct smtp_cmd_stream c_stream;
+    smtp_cmd_stream_init(&c_stream, c_fd);
 
     struct smtp_reply_stream s_stream;
     smtp_reply_stream_init(&s_stream, bio);
@@ -246,7 +159,7 @@ void smtp_handle_client(int c_fd, const char *host) {
                 break;
         }
         else if (FD_ISSET(c_fd, &rfds)) {
-            if (!smtp_client_handle_cmd(&client_state, c_fd, bio))
+            if (!smtp_client_handle_cmd(&c_stream, bio))
                 break;
         }
     }
@@ -261,9 +174,9 @@ close_client:
 
 /* Handling SMTP Client Commands */
 
-bool smtp_client_handle_cmd(struct smtp_client_state *state, int c_fd, BIO *s_bio) {
-    char c_data[RECV_BUF_SIZE];
-    ssize_t c_n = smtp_read_client_cmd(c_fd, c_data, sizeof(c_data));
+bool smtp_client_handle_cmd(struct smtp_cmd_stream *stream, BIO *s_bio) {
+    struct smtp_cmd cmd;
+    ssize_t c_n = smtp_cmd_next(stream, &cmd);
 
     if (c_n < 0) {
         syslog(LOG_USER | LOG_ERR, "Error reading data from client: %m");
@@ -274,21 +187,18 @@ bool smtp_client_handle_cmd(struct smtp_client_state *state, int c_fd, BIO *s_bi
         return false;
     }
 
-    struct smtp_command cmd;
-    smtp_parse_command(state, c_data, c_n, &cmd);
-
     switch (cmd.command) {
-    case SMTP_AUTH: {
-        const char *user = smtp_parse_auth_user(cmd.data, cmd.len);
+    case SMTP_CMD_AUTH: {
+        char *user = smtp_parse_auth_user(cmd.data, cmd.len);
 
         if (user) {
             GList *accounts = goa_client_get_accounts(get_goaclient(NULL));
             GList *account = find_goaccount(accounts, user);
 
-            free(user);
-
             if (account) {
-                bool auth = smtp_auth_client(c_fd, s_bio, account, user);
+                bool auth = smtp_auth_client(stream->fd, s_bio, account, user);
+
+                free(user);
                 g_list_free_full(accounts, (GDestroyNotify)g_object_unref);
 
                 return auth;
@@ -296,100 +206,24 @@ bool smtp_client_handle_cmd(struct smtp_client_state *state, int c_fd, BIO *s_bi
 
             syslog(LOG_USER | LOG_WARNING, "Could not find GNOME Online Account for username %s", user);
 
+            free(user);
             g_list_free_full(accounts, (GDestroyNotify)g_object_unref);
         }
     }
 
     default:
-        return smtp_server_send(s_bio, c_data, c_n);
+        return smtp_server_send(s_bio, stream->data, c_n);
     }
 
     return true;
 }
 
-ssize_t smtp_read_client_cmd(int fd, char *buf, size_t n) {
-    ssize_t total = 0;
-
-    while (1) {
-        ssize_t bytes = recv(fd, buf, n, 0);
-
-        if (bytes < 0) {
-            return bytes;
-        }
-        else if (bytes == 0) {
-            return total;
-        }
-
-        total += bytes;
-
-        if (buf[bytes - 1] == '\n') {
-            break;
-        }
-
-        buf += bytes;
-    };
-
-    return total;
-}
 
 
 /* Parsing SMTP Commands */
 
-bool smtp_parse_command(struct smtp_client_state *state, const char *response, size_t len, struct smtp_command *command) {
-    if (len > CMD_AUTH_PLAIN_LEN &&
-        strncasecmp(CMD_AUTH_PLAIN, response, CMD_AUTH_PLAIN_LEN) == 0 &&
-        (response[CMD_AUTH_PLAIN_LEN] == ' ' ||
-         response[CMD_AUTH_PLAIN_LEN] == '\r' ||
-         response[CMD_AUTH_PLAIN_LEN] == '\n')) {
 
-        command->command = SMTP_AUTH;
-        command->data = smtp_command_data_start(response + CMD_AUTH_PLAIN_LEN, len - CMD_AUTH_PLAIN_LEN);
-        command->len = smtp_command_data_len(command->data, (response + len) - command->data);
-
-        return true;
-    }
-
-    if (len > CMD_DATA_LEN &&
-        strncasecmp(CMD_DATA, response, CMD_DATA_LEN) == 0 &&
-        (response[CMD_DATA_LEN] == ' ' ||
-         response[CMD_DATA_LEN] == '\r' ||
-         response[CMD_DATA_LEN] == '\n')) {
-
-        command->command = SMTP_DATA;
-        command->data = NULL;
-        command->len = 0;
-    }
-
-    command->command = SMTP_CMD;
-    command->data = NULL;
-    command->len = 0;
-
-    return true;
-}
-
-const char *smtp_command_data_start(const char *data, size_t size) {
-    while (size-- && *data == ' ') {
-        data++;
-    }
-
-    return data;
-}
-
-size_t smtp_command_data_len(const char *data, size_t size) {
-    size_t len = 0;
-
-    while (size--) {
-        if (*data == '\r' || *data == '\n')
-            return len;
-
-        data++;
-        len++;
-    }
-
-    return len;
-}
-
-const char * smtp_parse_auth_user(const char *data, size_t n) {
+char * smtp_parse_auth_user(const char *data, size_t n) {
     char *dec = base64_decode(data, &n);
     if (!dec) return NULL;
 
