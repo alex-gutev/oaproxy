@@ -1,5 +1,8 @@
 #include "gaccounts.h"
 
+#include <assert.h>
+#include <syslog.h>
+
 static GoaClient *client = NULL;
 
 GoaClient *get_goaclient(GError ** error) {
@@ -26,6 +29,16 @@ GList * find_goaccount(GList *accounts, const char *user) {
 }
 
 gchar *get_access_token(GList *account) {
+    GError *error = NULL;
+
+    GoaAccount *acc = goa_object_get_account(GOA_OBJECT(account->data));
+    assert(acc);
+
+    if (!goa_account_call_ensure_credentials_sync(acc, NULL, NULL, &error)) {
+        syslog(LOG_ERR | LOG_USER, "Could not renew token: %s", error->message);
+        return NULL;
+    }
+
     GoaOAuth2Based *oauth2 =
         goa_object_get_oauth2_based(GOA_OBJECT(account->data));
 
