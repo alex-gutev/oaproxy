@@ -8,7 +8,7 @@
 /**
  * Maximum SMTP reply line length
  */
-#define SMTP_REPLY_MAX 512
+#define SMTP_REPLY_MAX 514
 
 #define OAP_STREAM_BUF_SIZE 1024
 
