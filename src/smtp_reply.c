@@ -3,11 +3,35 @@
 #include <string.h>
 #include <ctype.h>
 #include <syslog.h>
+#include <assert.h>
 
 #include "ssl.h"
+#include "xmalloc.h"
+
+#define OAP_STREAM_BUF_SIZE 1024
 
 #define STATUS_AUTH "AUTH "
 #define STATUS_AUTH_LEN 5
+
+struct smtp_reply_stream {
+    /** SMTP server OpenSSL BIO object */
+    BIO *bio;
+
+    /**
+     * Offset into the data buffer of the next reply data to process
+     */
+    size_t offset;
+
+    /**
+     * Number of bytes in data buffer
+     */
+    size_t size;
+
+    /**
+     * SMTP server reply data buffer
+     */
+    char data[OAP_STREAM_BUF_SIZE];
+};
 
 /**
  * Determine the length of the reply line.
@@ -28,9 +52,20 @@
 static bool reply_length(const char *data, size_t size, size_t *data_len, size_t *total_len);
 
 
-void smtp_reply_stream_init(struct smtp_reply_stream *stream, BIO *bio) {
+/* Implementation */
+
+struct smtp_reply_stream * smtp_reply_stream_create(BIO *bio) {
+    struct smtp_reply_stream *stream = xmalloc(sizeof(struct smtp_reply_stream));
+
     stream->bio = bio;
     stream->offset = stream->size = 0;
+
+    return stream;
+}
+
+void smtp_reply_stream_free(struct smtp_reply_stream *stream) {
+    assert(stream != NULL);
+    free(stream);
 }
 
 ssize_t smtp_reply_next(struct smtp_reply_stream *stream, struct smtp_reply *reply) {

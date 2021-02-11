@@ -137,8 +137,7 @@ void smtp_handle_client(int c_fd, const char *host) {
     struct smtp_cmd_stream c_stream;
     smtp_cmd_stream_init(&c_stream, c_fd);
 
-    struct smtp_reply_stream s_stream;
-    smtp_reply_stream_init(&s_stream, bio);
+    struct smtp_reply_stream * s_stream = smtp_reply_stream_create(bio);
 
     while (1) {
         fd_set rfds;
@@ -155,7 +154,7 @@ void smtp_handle_client(int c_fd, const char *host) {
         }
 
         if (FD_ISSET(s_fd, &rfds)) {
-            if (!smtp_server_handle_reply(c_fd, &s_stream))
+            if (!smtp_server_handle_reply(c_fd, s_stream))
                 break;
         }
         else if (FD_ISSET(c_fd, &rfds)) {
@@ -163,6 +162,8 @@ void smtp_handle_client(int c_fd, const char *host) {
                 break;
         }
     }
+
+    smtp_reply_stream_free(s_stream);
 
 close_server:
     BIO_free_all(bio);

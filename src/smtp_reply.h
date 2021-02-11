@@ -10,30 +10,10 @@
  */
 #define SMTP_REPLY_MAX 514
 
-#define OAP_STREAM_BUF_SIZE 1024
-
 /**
  * Stream of SMTP server replies
  */
-struct smtp_reply_stream {
-    /** SMTP server OpenSSL BIO object */
-    BIO *bio;
-
-    /**
-     * Offset into the data buffer of the next reply data to process
-     */
-    size_t offset;
-
-    /**
-     * Number of bytes in data buffer
-     */
-    size_t size;
-
-    /**
-     * SMTP server reply data buffer
-     */
-    char data[OAP_STREAM_BUF_SIZE];
-};
+struct smtp_reply_stream;
 
 /**
  * SMTP Reply Type Codes
@@ -90,12 +70,20 @@ struct smtp_reply {
 };
 
 /**
- * Initialize an smtp_reply_stream struct.
+ * Create an SMTP reply stream.
  *
- * @param stream Pointer to smtp_reply_stream struct.
- * @param bio OpenSSL BIO object for reading SMTP replies.
+ * @param bio SMTP Server OpenSSL BIO object.
+ *
+ * @return The smtp_reply_stream struct.
  */
-void smtp_reply_stream_init(struct smtp_reply_stream *stream, BIO *bio);
+struct smtp_reply_stream * smtp_reply_stream_create(BIO *bio);
+
+/**
+ * Free the memory held by an SMTP reply stream.
+ *
+ * @param stream Pointer to the smtp_reply_stream struct.
+ */
+void smtp_reply_stream_free(struct smtp_reply_stream *stream);
 
 /**
  * Read the next complete reply line from the SMTP reply stream.
