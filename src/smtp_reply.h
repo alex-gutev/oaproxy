@@ -13,7 +13,7 @@
 #define OAP_STREAM_BUF_SIZE 1024
 
 /**
- * Abstract stream of replies from the SMTP server.
+ * Stream of SMTP server replies
  */
 struct smtp_reply_stream {
     /** SMTP server OpenSSL BIO object */
