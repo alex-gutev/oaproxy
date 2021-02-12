@@ -19,10 +19,6 @@
 #define CMD_DATA "DATA"
 #define CMD_DATA_LEN 4
 
-#define DATA_TERM "\r\n.\r\n"
-#define DATA_TERM_LEN 5
-
-
 struct smtp_cmd_stream {
     /* File descriptor */
     int fd;
@@ -41,12 +37,6 @@ struct smtp_cmd_stream {
      * Buffer into which SMTP command is read.
      */
     char data[OAP_CMD_BUF_SIZE + 1];
-
-    /**
-     * Size of prefix of data terminator at the end of the previous
-     * data block sent by the client.
-     */
-    size_t data_term_len;
 };
 
 /**
@@ -96,16 +86,6 @@ static const char *cmd_data_start(const char *data, size_t size);
  */
 static size_t cmd_data_len(const char *data, size_t size);
 
-/**
- * Determine the length of the prefix of the data terminator located
- * at the end of a client data block.
- *
- * @param data Client data block.
- * @param len Data block length.
- *
- * @return Length of data terminator prefix.
- */
-static size_t data_term_pref_len(const char *data, size_t len);
 
 /* Implementations */
 
@@ -129,6 +109,10 @@ int smtp_cmd_stream_fd(struct smtp_cmd_stream *stream) {
     return stream->fd;
 }
 
+void smtp_cmd_stream_data_mode(struct smtp_cmd_stream *stream, bool in_data) {
+    stream->in_data = in_data;
+}
+
 ssize_t smtp_cmd_next(struct smtp_cmd_stream *stream, struct smtp_cmd *cmd) {
     ssize_t n = stream->in_data ? recv(stream->fd, stream->data, OAP_CMD_BUF_SIZE, 0) :
         read_cmd(stream->fd, stream->data, OAP_CMD_BUF_SIZE);
@@ -146,45 +130,11 @@ ssize_t smtp_cmd_next(struct smtp_cmd_stream *stream, struct smtp_cmd *cmd) {
 
     if (!stream->in_data) {
         parse_cmd(stream, cmd);
-        stream->data_term_len = 0;
     }
     else {
         cmd->command = SMTP_CMD;
         cmd->data = NULL;
         cmd->data_len = 0;
-
-        // Check whether data terminator is sent
-
-        const char *part_term = DATA_TERM;
-        part_term += stream->data_term_len;
-
-        // Check if partial data terminator is at beginning of client
-        // data.
-
-        if (strncmp(stream->data, part_term, DATA_TERM_LEN - stream->data_term_len) == 0) {
-            stream->in_data = false;
-            stream->data_term_len = 0;
-        }
-        else {
-            // Check if prefix of data terminator is at end of client
-            // data.
-
-            size_t blk_sz = stream->size > DATA_TERM_LEN ? DATA_TERM_LEN : stream->size;
-            blk_sz = data_term_pref_len(stream->data + (stream->size - blk_sz), blk_sz);
-
-            stream->data_term_len = blk_sz;
-
-            // Check if full data terminator is at end of client data.
-            if (stream->data_term_len == DATA_TERM_LEN) {
-                stream->in_data = false;
-                stream->data_term_len = 0;
-            }
-            else {
-                // Check whether full data terminator is somewhere in
-                // client data.
-                stream->in_data = strstr(stream->data, DATA_TERM) == NULL;
-            }
-        }
     }
 
     return n;
@@ -270,21 +220,4 @@ size_t cmd_data_len(const char *data, size_t size) {
     }
 
     return len;
-}
-
-size_t data_term_pref_len(const char *data, size_t len) {
-    const char *end = DATA_TERM;
-
-    size_t count = 0;
-
-    while (len--) {
-        if (*data == end[count])
-            count++;
-        else
-            count = 0;
-
-        data++;
-    }
-
-    return count;
 }

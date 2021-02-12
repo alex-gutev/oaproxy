@@ -78,4 +78,12 @@ int smtp_cmd_stream_fd(struct smtp_cmd_stream *stream);
  */
 ssize_t smtp_cmd_next(struct smtp_cmd_stream *stream, struct smtp_cmd *cmd);
 
+/**
+ * Change the mode of the stream to/from command/data mode.
+ *
+ * @param in_data True to put stream in data mode. False to put stream
+ *   in command mode.
+ */
+void smtp_cmd_stream_data_mode(struct smtp_cmd_stream *stream, bool in_data);
+
 #endif /* OAPROXY_SMTP_CMD_H */

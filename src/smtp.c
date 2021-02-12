@@ -103,7 +103,7 @@ static bool smtp_client_send(int fd, const char *data, size_t n);
  *
  * @return True if successful, False otherwise.
  */
-static bool smtp_server_handle_reply(int c_fd, struct smtp_reply_stream *stream);
+static bool smtp_server_handle_reply(int c_fd, struct smtp_reply_stream *s_stream, struct smtp_cmd_stream *c_stream);
 
 
 /* Implementation */
@@ -152,7 +152,7 @@ void smtp_handle_client(int c_fd, const char *host) {
         }
 
         if (FD_ISSET(s_fd, &rfds)) {
-            if (!smtp_server_handle_reply(c_fd, s_stream))
+            if (!smtp_server_handle_reply(c_fd, s_stream, c_stream))
                 break;
         }
         else if (FD_ISSET(c_fd, &rfds)) {
@@ -321,12 +321,12 @@ bool smtp_client_send(int fd, const char *data, size_t n) {
 
 /* Handle SMTP server response */
 
-bool smtp_server_handle_reply(int c_fd, struct smtp_reply_stream *stream) {
+bool smtp_server_handle_reply(int c_fd, struct smtp_reply_stream *s_stream, struct smtp_cmd_stream *c_stream) {
     struct smtp_reply reply;
     reply.last = false;
 
     while (!reply.last) {
-        if (smtp_reply_next(stream, &reply) <= 0)
+        if (smtp_reply_next(s_stream, &reply) <= 0)
             return false;
 
         smtp_reply_parse(&reply);
@@ -343,6 +343,8 @@ bool smtp_server_handle_reply(int c_fd, struct smtp_reply_stream *stream) {
         } break;
 
         default:
+            smtp_cmd_stream_data_mode(c_stream, reply.code == 354);
+
             if (!smtp_client_send(c_fd, reply.data, reply.total_len))
                 return false;
 
