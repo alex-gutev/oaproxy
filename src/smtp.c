@@ -146,8 +146,6 @@ void smtp_handle_client(int c_fd, const char *host) {
         goto close_server;
     }
 
-    BIO_set_nbio(bio, 1);
-
     int s_fd = BIO_get_fd(bio, NULL);
     int maxfd = c_fd < s_fd ? s_fd : c_fd;
 

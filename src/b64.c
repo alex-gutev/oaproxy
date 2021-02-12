@@ -23,7 +23,7 @@ static const char *b64_alphabet = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrs
 static unsigned char char_to_index(char chr);
 
 char *base64_encode(const char *data, size_t size) {
-    char * out = malloc(size * 4);
+    char * out = xmalloc(size * 4);
 
     int state = 0;
     unsigned chr = 0;
@@ -78,7 +78,7 @@ char *base64_encode(const char *data, size_t size) {
 
 char *base64_decode(const char *data, size_t *size) {
     size_t n = *size;
-    unsigned char *out = malloc(n * 4);
+    unsigned char *out = xmalloc(n * 4);
 
     int state = 0;
     size_t pos = 0;

@@ -56,8 +56,6 @@ int main(int argc, char *argv[])
     run_server(port, argv[2]);
     destroy_ssl();
 
-
-
     return 0;
 }
 
