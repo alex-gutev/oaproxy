@@ -194,8 +194,8 @@ bool parse_cmd(struct smtp_cmd_stream *stream, struct smtp_cmd *command) {
     }
 
     command->command = SMTP_CMD;
-    command->data = NULL;
-    command->data_len = 0;
+    command->data = stream->data;
+    command->data_len = cmd_data_len(command->data, stream->size);
 
     return true;
 }

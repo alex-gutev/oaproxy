@@ -61,6 +61,18 @@ static bool smtp_client_handle_cmd(struct smtp_cmd_stream *stream, BIO *s_bio);
 static bool smtp_handle_auth(struct smtp_cmd_stream *stream, BIO *s_bio, const struct smtp_cmd *cmd);
 
 /**
+ * Request credentials for AUTH PLAIN from client.
+ *
+ * @param stream SMTP command stream.
+ * @param cmd SMTP command.
+ *
+ * @return True if the credentials were received successfully. False
+ *   if there was an error sending the request for credentials or
+ *   receiving the reply.
+ */
+static bool smtp_get_credentials(struct smtp_cmd_stream *stream, struct smtp_cmd *cmd);
+
+/**
  * Parse the username from an SMTP plain auth command.
  *
  * @param data Data following SMTP AUTH PLAIN command.
@@ -204,6 +216,10 @@ bool smtp_client_handle_cmd(struct smtp_cmd_stream *stream, BIO *s_bio) {
 
     switch (cmd.command) {
     case SMTP_CMD_AUTH:
+        if (cmd.data_len == 0 && !smtp_get_credentials(stream, &cmd)) {
+            return false;
+        }
+
         return smtp_handle_auth(stream, s_bio, &cmd);
 
     default:
@@ -216,6 +232,17 @@ bool smtp_client_handle_cmd(struct smtp_cmd_stream *stream, BIO *s_bio) {
 
 
 /* Authentication */
+
+static bool smtp_get_credentials(struct smtp_cmd_stream *stream, struct smtp_cmd *cmd) {
+    char resp[] = "334\r\n";
+
+    if (!smtp_client_send(smtp_cmd_stream_fd(stream), resp, strlen(resp))) {
+        return false;
+    }
+
+    ssize_t n = smtp_cmd_next(stream, cmd);
+    return n > 0;
+}
 
 bool smtp_handle_auth(struct smtp_cmd_stream *stream, BIO *s_bio, const struct smtp_cmd *cmd) {
     bool succ = true;
