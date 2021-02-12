@@ -41,7 +41,24 @@
 static bool smtp_client_handle_cmd(struct smtp_cmd_stream *stream, BIO *s_bio);
 
 
-/* Command Parsing */
+/* Authentication */
+
+/**
+ * Handle AUTH command from client.
+ *
+ * Authenticate the user, corresponding to a GOA account, using
+ * XOAuth2.
+ *
+ * @param stream Client command stream
+ * @param s_bio  Server OpenSSL Bio Object
+ * @param cmd    SMTP command
+ *
+ * @return Returns true if the command was processed
+ *   successfully. This does not mean the user was authenticated, only
+ *   that all read/write commands succeeded and that the proxy loop
+ *   should continue.
+ */
+static bool smtp_handle_auth(struct smtp_cmd_stream *stream, BIO *s_bio, const struct smtp_cmd *cmd);
 
 /**
  * Parse the username from an SMTP plain auth command.
@@ -188,28 +205,8 @@ bool smtp_client_handle_cmd(struct smtp_cmd_stream *stream, BIO *s_bio) {
     }
 
     switch (cmd.command) {
-    case SMTP_CMD_AUTH: {
-        char *user = smtp_parse_auth_user(cmd.data, cmd.data_len);
-
-        if (user) {
-            GList *accounts = goa_client_get_accounts(get_goaclient(NULL));
-            GList *account = find_goaccount(accounts, user);
-
-            if (account) {
-                bool auth = smtp_auth_client(smtp_cmd_stream_fd(stream), s_bio, account, user);
-
-                free(user);
-                g_list_free_full(accounts, (GDestroyNotify)g_object_unref);
-
-                return auth;
-            }
-
-            syslog(LOG_USER | LOG_WARNING, "Could not find GNOME Online Account for username %s", user);
-
-            free(user);
-            g_list_free_full(accounts, (GDestroyNotify)g_object_unref);
-        }
-    }
+    case SMTP_CMD_AUTH:
+        return smtp_handle_auth(stream, s_bio, &cmd);
 
     default:
         return smtp_server_send(s_bio, cmd.line, cmd.total_len);
@@ -220,8 +217,38 @@ bool smtp_client_handle_cmd(struct smtp_cmd_stream *stream, BIO *s_bio) {
 
 
 
-/* Parsing SMTP Commands */
+/* Authentication */
 
+bool smtp_handle_auth(struct smtp_cmd_stream *stream, BIO *s_bio, const struct smtp_cmd *cmd) {
+    bool succ = true;
+    char *user = smtp_parse_auth_user(cmd->data, cmd->data_len);
+
+    if (!user) {
+        char err[] = "501 Syntax error in credentials\r\n";
+        succ = smtp_client_send(smtp_cmd_stream_fd(stream), err, strlen(err));
+
+        goto end;
+    }
+
+    GList *accounts = goa_client_get_accounts(get_goaclient(NULL));
+    GList *account = find_goaccount(accounts, user);
+
+    if (account) {
+        succ = smtp_auth_client(smtp_cmd_stream_fd(stream), s_bio, account, user);
+    }
+    else {
+        syslog(LOG_USER | LOG_WARNING, "Could not find GNOME Online Account for username %s", user);
+
+        char err[] = "535 Invalid username or password\r\n";
+        succ = smtp_client_send(smtp_cmd_stream_fd(stream), err, strlen(err));
+    }
+
+    g_list_free_full(accounts, (GDestroyNotify)g_object_unref);
+
+end:
+    free(user);
+    return succ;
+}
 
 char * smtp_parse_auth_user(const char *data, size_t n) {
     char *dec = base64_decode(data, &n);
@@ -229,25 +256,24 @@ char * smtp_parse_auth_user(const char *data, size_t n) {
 
     // Find first NUL character
     size_t user_start = 0;
-    while (n && dec[user_start++]) {
-        n--;
-        user_start++;
-    }
+    while (n-- && dec[user_start++]);
 
     // Find end of username
     size_t pass_start = user_start;
-    while (n && dec[pass_start++]) {
-        n--;
-    }
+    while (n-- && dec[pass_start++]);
 
     size_t user_len = pass_start - user_start;
+    if (user_len <= 1) goto error;
 
     char *user = malloc(user_len);
     memcpy(user, dec + user_start, user_len);
 
     free(dec);
-
     return user;
+
+error:
+    free(dec);
+    return NULL;
 }
 
 bool smtp_auth_client(int fd, BIO *bio, GList *account, const char *user) {

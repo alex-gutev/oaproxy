@@ -5,7 +5,11 @@
 #include <stdbool.h>
 #include <assert.h>
 
+#include "xmalloc.h"
+
 static const char *b64_alphabet = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
+
+#define NOINDEX ((unsigned char)-1)
 
 /**
  * Convert a base64 alphabet character to the corresponding 6 data
@@ -85,6 +89,8 @@ char *base64_decode(const char *data, size_t *size) {
         if (chr == '=') break;
         unsigned char index = char_to_index(chr);
 
+        if (index == NOINDEX) goto error;
+
         switch (state) {
         case 0:
             out[pos] = index << 2;
@@ -110,8 +116,16 @@ char *base64_decode(const char *data, size_t *size) {
         }
     }
 
+    while (n--) {
+        if (*data++ != '=') goto error;
+    }
+
     *size = pos;
-    return out;
+    return (char *)out;
+
+error:
+    free(out);
+    return NULL;
 }
 
 unsigned char char_to_index(char chr) {
@@ -126,5 +140,5 @@ unsigned char char_to_index(char chr) {
     else if (chr == '/')
         return 63;
 
-    return -1;
+    return NOINDEX;
 }
