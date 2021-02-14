@@ -7,6 +7,22 @@
 /* Gnome online accounts */
 
 /**
+ * Enumeration representing Gnome Online Account errors.
+ */
+typedef enum goa_error {
+    /**
+     * Account credentials invalid. Account not authorized for
+     * SMTP/IMAP access.
+     */
+    ACCOUNT_ERROR_CRED = 1,
+
+    /**
+     * Error obtaining token/oauth2 object.
+     */
+    ACCOUNT_ERROR_TOKEN,
+} goa_error;
+
+/**
  * Retrieve the Gnome Online Accounts client.
  *
  * @param error If given pointer to a GError which is filled with the
@@ -32,9 +48,12 @@ GList * find_goaccount(GList *accounts, const char *user);
  *
  * @param account GOA account
  *
+ * @param error Pointer to variable receiving goa_error constant on
+ *   error.
+ *
  * @return Access token, or NULL if their was an error.
  */
-gchar *get_access_token(GList *account);
+gchar *get_access_token(GList *account, goa_error *error);
 
 
 #endif /* OAPROXY_GACCOUNTS_H */

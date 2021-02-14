@@ -28,14 +28,18 @@ GList * find_goaccount(GList *accounts, const char *user) {
     return l;
 }
 
-gchar *get_access_token(GList *account) {
+gchar *get_access_token(GList *account, goa_error *gerr) {
     GError *error = NULL;
+    gchar *access_token = NULL;
 
     GoaAccount *acc = goa_object_get_account(GOA_OBJECT(account->data));
     assert(acc);
 
     if (!goa_account_call_ensure_credentials_sync(acc, NULL, NULL, &error)) {
-        syslog(LOG_ERR | LOG_USER, "Could not renew token: %s", error->message);
+        *gerr = ACCOUNT_ERROR_CRED;
+        syslog(LOG_ERR | LOG_USER, "Could not verify gnome online account credentials: %s", error->message);
+
+        g_error_free(error);
         return NULL;
     }
 
@@ -43,18 +47,22 @@ gchar *get_access_token(GList *account) {
         goa_object_get_oauth2_based(GOA_OBJECT(account->data));
 
     if (oauth2) {
-        gchar *access_token;
+        if (!goa_oauth2_based_call_get_access_token_sync(oauth2,
+                                                         &access_token,
+                                                         NULL,
+                                                         NULL,
+                                                         NULL)) {
+            access_token = NULL;
+            *gerr = ACCOUNT_ERROR_TOKEN;
 
-        if (goa_oauth2_based_call_get_access_token_sync(oauth2,
-                                                        &access_token,
-                                                        NULL,
-                                                        NULL,
-                                                        NULL)) {
-            return access_token;
+            syslog(LOG_ERR | LOG_USER, "Error obtaining OAUTH2 object for gnome online account");
         }
 
         g_clear_object(&oauth2);
     }
+    else {
+        *gerr = ACCOUNT_ERROR_TOKEN;
+    }
 
-    return NULL;
+    return access_token;
 }

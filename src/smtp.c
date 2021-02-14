@@ -96,6 +96,17 @@ static char * smtp_parse_auth_user(const char *data, size_t n);
  */
 static bool smtp_auth_client(int fd, BIO *bio, GList *account, const char *user);
 
+/**
+ * Report gnome online account error to SMTP client.
+ *
+ * @param fd client socket descriptor
+ * @param gerr GOA account error
+ *
+ * @return True if the error was reported successfully, false
+ *   otherwise.
+ */
+static bool smtp_auth_error(int fd, goa_error gerr);
+
 
 /* Sending Data */
 
@@ -302,39 +313,65 @@ error:
 }
 
 bool smtp_auth_client(int fd, BIO *bio, GList *account, const char *user) {
-    char s_data[RECV_BUF_SIZE];
-    ssize_t s_n;
+    bool succ = true;
 
     // Get Access Token
 
-    gchar *token = get_access_token(account);
+    goa_error gerr;
+    gchar *token = get_access_token(account, &gerr);
+
+    if (!token) {
+        return smtp_auth_error(fd, gerr);
+    }
+
     char *resp = xoauth2_make_client_response(user, token);
+
+    if (!resp) {
+        syslog(LOG_USER | LOG_ERR, "Error formatting SASL client response mechanism: %m");
+        succ = false;
+
+        goto free_token;
+    }
 
     char *auth_cmd;
     if (asprintf(&auth_cmd, "AUTH XOAUTH2 %s\r\n", resp) == -1) {
-        syslog(LOG_USER | LOG_ERR, "asprintf error: %m");
-        return false;
+        syslog(LOG_USER | LOG_ERR, "asprintf error (formatting SMTP AUTH command): %m");
+        succ = false;
+        goto free_resp;
     }
 
     // Send Authentication Command to server
 
-    if (!smtp_server_send(bio, auth_cmd, strlen(auth_cmd)))
-        return false;
-
-    // Read Response from server
-
-    s_n = BIO_read(bio, s_data, sizeof(s_data));
-
-    if (s_n < 0) {
-        ssl_log_error("Error reading SMTP server response");
-        return false;
-    }
-    else if (s_n == 0) {
-        syslog(LOG_USER | LOG_WARNING, "SMTP server closed connection before AUTH response");
-        return false;
+    if (!smtp_server_send(bio, auth_cmd, strlen(auth_cmd))) {
+        succ = false;
     }
 
-    return smtp_client_send(fd, s_data, s_n);
+    free(auth_cmd);
+
+free_resp:
+    free(resp);
+
+free_token:
+    g_free(token);
+
+    return succ;
+}
+
+bool smtp_auth_error(int fd, goa_error gerr) {
+    switch (gerr) {
+    case ACCOUNT_ERROR_CRED: {
+        const char *err = "535 Account not authorized for SMTP\r\n";
+        return smtp_client_send(fd, err, strlen(err));
+    } break;
+
+    case ACCOUNT_ERROR_TOKEN: {
+        const char *err = "451 Error obtaining access token\r\n";
+        return smtp_client_send(fd, err, strlen(err));
+    } break;
+    }
+
+    assert(false);
+    return true;
 }
 
 bool smtp_server_send(BIO *bio, const char *data, size_t n) {
