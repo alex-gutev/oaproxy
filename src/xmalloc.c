@@ -13,3 +13,14 @@ void *xmalloc(size_t n) {
 
     return p;
 }
+
+void *xrealloc(void *ptr, size_t size) {
+    ptr = realloc(ptr, size);
+
+    if (!ptr) {
+        syslog(LOG_USER | LOG_CRIT, "Error reallocating memory");
+        abort();
+    }
+
+    return ptr;
+}

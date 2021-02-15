@@ -12,4 +12,14 @@
  */
 void *xmalloc(size_t n);
 
+/**
+ * Reallocate memory (like realloc) but abort if allocation fails.
+ *
+ * @param ptr Pointer to existing block.
+ * @param size New size
+ *
+ * @return Pointer to reallocated memory. Never returns NULL.
+ */
+void *xrealloc(void *ptr, size_t size);
+
 #endif /* OAPROX_XMALLOC_H */
