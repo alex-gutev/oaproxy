@@ -214,6 +214,9 @@ bool imap_authenticate(int c_fd, BIO * s_bio, int s_fd) {
     struct imap_cmd_stream *stream = imap_cmd_stream_create(c_fd);
     int maxfd = c_fd < s_fd ? s_fd : c_fd;
 
+    size_t c_n;
+    const char *c_data;
+
     while (1) {
         fd_set rfds;
 
@@ -226,7 +229,7 @@ bool imap_authenticate(int c_fd, BIO * s_bio, int s_fd) {
         if (retval < 0) {
             syslog(LOG_USER | LOG_ERR, "IMAP: select() error: %m");
             succ = false;
-            break;
+            goto close;
         }
 
         if (FD_ISSET(s_fd, &rfds)) {
@@ -235,17 +238,17 @@ bool imap_authenticate(int c_fd, BIO * s_bio, int s_fd) {
 
             if (n < 0) {
                 succ = false;
-                break;
+                goto close;
             }
             else if (n == 0) {
                 syslog(LOG_USER | LOG_NOTICE, "IMAP: Server closed connection");
                 succ = false;
-                break;
+                goto close;
             }
 
             if (!imap_client_send(c_fd, s_data, n)) {
                 succ = false;
-                break;
+                goto close;
             }
         }
 
@@ -254,14 +257,18 @@ bool imap_authenticate(int c_fd, BIO * s_bio, int s_fd) {
 
             if (!imap_cmd_next(stream, &cmd)) {
                 succ = false;
-                break;
+                goto close;
             }
 
             switch (cmd.command) {
             case IMAP_CMD_LOGIN: {
                 int ret = imap_login(c_fd, s_bio, &cmd);
-                if (ret) {
-                    succ = ret == 1;
+
+                if (ret == 1) {
+                    goto finish;
+                }
+                else if (ret == -1) {
+                    succ = false;
                     goto close;
                 }
             } break;
@@ -276,6 +283,14 @@ bool imap_authenticate(int c_fd, BIO * s_bio, int s_fd) {
         }
     }
 
+finish:
+    // Send remaining client data in buffer to server
+    c_data = imap_cmd_buffer(stream, &c_n);
+
+    if (c_data) {
+        succ = imap_server_send(s_bio, c_data, c_n);
+    }
+
 close:
     imap_cmd_stream_free(stream);
     return succ;
@@ -283,12 +298,16 @@ close:
 
 int imap_login(int c_fd, BIO * s_bio, const struct imap_cmd *cmd) {
     int ret = 1;
+
+    char *tag = xmalloc(cmd->tag_len + 1);
+    memcpy(tag, cmd->tag, cmd->tag_len);
+    tag[cmd->tag_len] = 0;
+
     char *user = imap_parse_string(cmd->param, cmd->param_len);
 
-    cmd->tag[cmd->tag_len] = 0;
-
     if (!user) {
-        return imap_login_syntax_error(c_fd, cmd->tag) ? 0 : -1;
+        ret = imap_login_syntax_error(c_fd, tag) ? 0 : -1;
+        goto free_tag;
     }
 
     GList *accounts = goa_client_get_accounts(get_goaclient(NULL));
@@ -297,7 +316,7 @@ int imap_login(int c_fd, BIO * s_bio, const struct imap_cmd *cmd) {
     if (!account) {
         syslog(LOG_USER | LOG_WARNING, "IMAP: Could not find GNOME Online Account for username %s", user);
 
-        ret = imap_invalid_user(c_fd, cmd->tag) ? 0 : -1;
+        ret = imap_invalid_user(c_fd, tag) ? 0 : -1;
         goto free_user;
     }
 
@@ -305,7 +324,7 @@ int imap_login(int c_fd, BIO * s_bio, const struct imap_cmd *cmd) {
     gchar *token = get_access_token(account, &gerr);
 
     if (!token) {
-        ret = imap_auth_error(c_fd, gerr, cmd->tag) ? 0 : -1;
+        ret = imap_auth_error(c_fd, gerr, tag) ? 0 : -1;
         goto free_accounts;
     }
 
@@ -318,7 +337,7 @@ int imap_login(int c_fd, BIO * s_bio, const struct imap_cmd *cmd) {
     }
 
     char *auth_cmd;
-    if (asprintf(&auth_cmd, "%s AUTHENTICATE XOAUTH2 %s\r\n", cmd->tag, resp) == -1) {
+    if (asprintf(&auth_cmd, "%s AUTHENTICATE XOAUTH2 %s\r\n", tag, resp) == -1) {
         syslog(LOG_USER | LOG_ERR, "asprintf error (formatting IMAP AUTHENTICATE command): %m");
         ret = -1;
         goto free_resp;
@@ -342,6 +361,9 @@ free_accounts:
 
 free_user:
     free(user);
+
+free_tag:
+    free(tag);
 
     return ret;
 }

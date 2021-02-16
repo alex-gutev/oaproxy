@@ -29,17 +29,17 @@ struct imap_cmd {
     imap_cmd_type command;
 
     /** Pointer to start of command data line */
-    char *line;
+    const char *line;
     /** Length of entire command data line */
     size_t total_len;
 
     /** Pointer to start of command ID tag */
-    char *tag;
+    const char *tag;
     /** Length of command tag */
     size_t tag_len;
 
     /** Pointer to start of command parameters */
-    char *param;
+    const char *param;
     /** Length of command parameters */
     size_t param_len;
 };
@@ -70,6 +70,19 @@ void imap_cmd_stream_free(struct imap_cmd_stream *stream);
  *   connection), -1 if an error occurred.
  */
 ssize_t imap_cmd_next(struct imap_cmd_stream *stream, struct imap_cmd *cmd);
+
+/**
+ * Return the remaining data in the stream's buffer.
+ *
+ * @param stream IMAP command stream.
+ *
+ * @param size Pointer to size_t which will receive the size of the
+ *   buffer.
+ *
+ * @return Pointer to the buffer. NULL if there is no unprocessed data
+ *   in the buffer.
+ */
+const char *imap_cmd_buffer(struct imap_cmd_stream *stream, size_t *size);
 
 /**
  * Parse a string from an IMAP command parameter.

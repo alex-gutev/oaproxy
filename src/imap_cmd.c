@@ -4,6 +4,7 @@
 #include <string.h>
 #include <stdlib.h>
 #include <assert.h>
+#include <syslog.h>
 
 #include <sys/types.h>
 #include <sys/socket.h>
@@ -21,23 +22,26 @@ struct imap_cmd_stream {
 
     /** Size of last IMAP command line */
     size_t size;
+
+    /**
+     * Offset within the buffer to first byte of unprocessed data.
+     */
+    size_t offset;
+
     /** Buffer into which IMAP command is read */
     char data[OAP_CMD_BUF_SIZE + 1];
 };
 
 /**
- * Read an IMAP command from the client.
+ * Return the length of the next command in the data buffer.
  *
- * Reads data until a complete command line (terminated by CRLF) is
- * read.
+ * @param data Pointer to data buffer
+ * @param sz Number of bytes in buffer
  *
- * @param fd Client socket file descriptor.
- * @param buf Buffer into which to read command
- * @param n Buffer size
- *
- * @return Number of bytes read. -1 if an error occurred.
+ * @return Length of the buffer, or 0 if there isn't a complete
+ *   command line in the buffer.
  */
-static ssize_t read_cmd(int fd, char *buf, size_t n);
+static size_t cmd_length(const char *data, size_t sz);
 
 /**
  * Parse an IMAP command.
@@ -86,6 +90,7 @@ struct imap_cmd_stream * imap_cmd_stream_create(int fd) {
 
     stream->fd = fd;
     stream->size = 0;
+    stream->offset = 0;
 
     return stream;
 }
@@ -97,44 +102,64 @@ void imap_cmd_stream_free(struct imap_cmd_stream *stream) {
 
 
 ssize_t imap_cmd_next(struct imap_cmd_stream *stream, struct imap_cmd *cmd) {
-    ssize_t n = read_cmd(stream->fd, stream->data, OAP_CMD_BUF_SIZE);
+    while (1) {
+        // Check if there is data left in the stream buffer
+        if (stream->offset < stream->size) {
+            size_t len = cmd_length(stream->data + stream->offset, stream->size - stream->offset);
 
-    if (n <= 0) return n;
+            // If complete return command
+            if (len) {
+                cmd->line = stream->data + stream->offset;
+                cmd->total_len = len;
 
-    stream->data[n] = 0;
-    stream->size = n;
+                parse_cmd(cmd);
 
-    cmd->line = stream->data;
-    cmd->total_len = n;
+                stream->offset += len;
+                return len;
+            }
 
-    parse_cmd(cmd);
+            // Move partial command to beginning of buffer
+            if (stream->offset) {
+                memmove(stream->data, stream->data + stream->offset, stream->size - stream->offset);
+                stream->size -= stream->offset;
+                stream->offset = 0;
+            }
+        }
+        else {
+            stream->offset = 0;
+            stream->size = 0;
+        }
 
-    return n;
+        // Read next block of data
+        ssize_t n = recv(stream->fd, stream->data + stream->size, OAP_CMD_BUF_SIZE - stream->size, 0);
+
+        if (n < 0) {
+            syslog(LOG_USER | LOG_ERR, "IMAP: Error reading command from client: %m");
+            return n;
+        }
+        else if (n == 0) {
+            syslog(LOG_USER | LOG_ERR, "IMAP client closed connection.");
+            return 0;
+        }
+
+        stream->size += n;
+    }
 }
 
-ssize_t read_cmd(int fd, char *buf, size_t n) {
-    ssize_t total = 0;
+size_t cmd_length(const char *data, size_t sz) {
+    size_t total = 0;
 
-    while (1) {
-        ssize_t bytes = recv(fd, buf, n, 0);
+    while (sz--) {
+        char c = *data++;
 
-        if (bytes < 0) {
-            return bytes;
-        }
-        else if (bytes == 0) {
-            return total;
+        if (sz && c == '\r' && *data == '\n') {
+            return total + 2;
         }
 
-        total += bytes;
+        total++;
+    }
 
-        if (buf[bytes - 1] == '\n') {
-            break;
-        }
-
-        buf += bytes;
-    };
-
-    return total;
+    return 0;
 }
 
 bool parse_cmd(struct imap_cmd *cmd) {
@@ -152,7 +177,7 @@ bool parse_cmd(struct imap_cmd *cmd) {
 }
 
 bool parse_tag(struct imap_cmd *cmd) {
-    char *data = cmd->line;
+    const char *data = cmd->line;
     size_t n = cmd->total_len;
 
     cmd->tag = data;
@@ -170,7 +195,7 @@ bool parse_tag(struct imap_cmd *cmd) {
 }
 
 bool parse_cmd_name(struct imap_cmd *cmd) {
-    char *data = cmd->tag + cmd->tag_len;
+    const char *data = cmd->tag + cmd->tag_len;
     size_t n = cmd->total_len - cmd->tag_len;
 
     while (n && *data == ' ') {
@@ -187,6 +212,14 @@ bool parse_cmd_name(struct imap_cmd *cmd) {
     return true;
 }
 
+const char *imap_cmd_buffer(struct imap_cmd_stream *stream, size_t *size) {
+    if (stream->offset < stream->size) {
+        *size = stream->size - stream->offset;
+        return stream->data + stream->offset;
+    }
+
+    return NULL;
+}
 
 /* Parsing Strings */
 
