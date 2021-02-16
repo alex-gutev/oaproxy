@@ -73,7 +73,7 @@ int smtp_cmd_stream_fd(struct smtp_cmd_stream *stream);
  *
  * @param cmd Pointer to smtp_cmd struct which is filled on output.
  *
- * @param Number of bytes read, 0 if no bytes are read (client closed
+ * @return Number of bytes read, 0 if no bytes are read (client closed
  *   connection), -1 if an error occurred.
  */
 ssize_t smtp_cmd_next(struct smtp_cmd_stream *stream, struct smtp_cmd *cmd);

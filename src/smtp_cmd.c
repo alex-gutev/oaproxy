@@ -160,6 +160,7 @@ ssize_t read_cmd(int fd, char *buf, size_t n) {
         }
 
         buf += bytes;
+        n -= bytes;
     };
 
     return total;
