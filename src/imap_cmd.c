@@ -100,8 +100,11 @@ void imap_cmd_stream_free(struct imap_cmd_stream *stream) {
     free(stream);
 }
 
+int imap_cmd_stream_fd(struct imap_cmd_stream *stream) {
+    return stream->fd;
+}
 
-ssize_t imap_cmd_next(struct imap_cmd_stream *stream, struct imap_cmd *cmd) {
+ssize_t imap_cmd_next(struct imap_cmd_stream *stream, struct imap_cmd *cmd, const bool wait) {
     while (1) {
         // Check if there is data left in the stream buffer
         if (stream->offset < stream->size) {
@@ -129,6 +132,9 @@ ssize_t imap_cmd_next(struct imap_cmd_stream *stream, struct imap_cmd *cmd) {
             stream->offset = 0;
             stream->size = 0;
         }
+
+        if (!wait)
+            return 0;
 
         // Read next block of data
         ssize_t n = recv(stream->fd, stream->data + stream->size, OAP_CMD_BUF_SIZE - stream->size, 0);

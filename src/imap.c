@@ -43,6 +43,17 @@
 static bool imap_authenticate(int c_fd, BIO * s_bio, int s_fd);
 
 /**
+ * Handle a command from the client.
+ *
+ * @param stream IMAP command stream
+ * @param s_bio  Server OpenSSL BIO object
+ *
+ * @return 1 - if the client has been authenticated, 0 - otherwise, -1
+ *   if there was an error sending or receiving data.
+ */
+static int handle_client_command(struct imap_cmd_stream *stream, BIO *s_bio);
+
+/**
  * Handle an IMAP LOGIN command, by sending XOAUTH2 authentication
  * command to server.
  *
@@ -211,7 +222,7 @@ close_client:
 bool imap_authenticate(int c_fd, BIO * s_bio, int s_fd) {
     bool succ = true;
 
-    struct imap_cmd_stream *stream = imap_cmd_stream_create(c_fd);
+    struct imap_cmd_stream *c_stream = imap_cmd_stream_create(c_fd);
     int maxfd = c_fd < s_fd ? s_fd : c_fd;
 
     size_t c_n;
@@ -253,47 +264,59 @@ bool imap_authenticate(int c_fd, BIO * s_bio, int s_fd) {
         }
 
         if (FD_ISSET(c_fd, &rfds)) {
-            struct imap_cmd cmd;
+            int ret = handle_client_command(c_stream, s_bio);
 
-            if (!imap_cmd_next(stream, &cmd)) {
-                succ = false;
-                goto close;
+            if (ret == 1) {
+                goto finish;
             }
-
-            switch (cmd.command) {
-            case IMAP_CMD_LOGIN: {
-                int ret = imap_login(c_fd, s_bio, &cmd);
-
-                if (ret == 1) {
-                    goto finish;
-                }
-                else if (ret == -1) {
-                    succ = false;
-                    goto close;
-                }
-            } break;
-
-            default:
-                if (!imap_server_send(s_bio, cmd.line, cmd.total_len)) {
-                    succ = false;
-                    goto close;
-                }
-                break;
+            else if (ret == -1) {
+                goto close;
             }
         }
     }
 
 finish:
     // Send remaining client data in buffer to server
-    c_data = imap_cmd_buffer(stream, &c_n);
+    c_data = imap_cmd_buffer(c_stream, &c_n);
 
     if (c_data) {
         succ = imap_server_send(s_bio, c_data, c_n);
     }
 
 close:
-    imap_cmd_stream_free(stream);
+    imap_cmd_stream_free(c_stream);
     return succ;
+}
+
+
+int handle_client_command(struct imap_cmd_stream *stream, BIO *s_bio) {
+    struct imap_cmd cmd;
+    bool wait = true;
+
+    while (1) {
+        ssize_t c_n = imap_cmd_next(stream, &cmd, wait);
+
+        if (c_n < 0)
+            return false;
+        else if (c_n == 0)
+            return !wait ? 0 : -1;
+
+        switch (cmd.command) {
+        case IMAP_CMD_LOGIN: {
+            int ret = imap_login(imap_cmd_stream_fd(stream), s_bio, &cmd);
+
+            if (ret) return ret;
+        } break;
+
+        default:
+            if (!imap_server_send(s_bio, cmd.line, cmd.total_len)) {
+                return -1;
+            }
+            break;
+        }
+
+        wait = false;
+    }
 }
 
 int imap_login(int c_fd, BIO * s_bio, const struct imap_cmd *cmd) {

@@ -64,12 +64,27 @@ void imap_cmd_stream_free(struct imap_cmd_stream *stream);
  * Read and parse the next command from the command stream.
  *
  * @param stream IMAP command stream.
+ *
  * @param cmd Pointer to imap_cmd struct, filled on output.
  *
+ * @param wait If true, will block until new data is received,
+ *   otherwise will return immediately.
+ *
  * @return Number of bytes read, 0 if no bytes are read (client closed
- *   connection), -1 if an error occurred.
+ *   connection), -1 if an error occurred. If wait is false, a return
+ *   value of 0 indicates that there isn't a complete command left in
+ *   the buffer.
  */
-ssize_t imap_cmd_next(struct imap_cmd_stream *stream, struct imap_cmd *cmd);
+ssize_t imap_cmd_next(struct imap_cmd_stream *stream, struct imap_cmd *cmd, const bool wait);
+
+/**
+ * Return the client socket file descriptor.
+ *
+ * @param stream IMAP command stream.
+ *
+ * @return Socket file descriptor.
+ */
+int imap_cmd_stream_fd(struct imap_cmd_stream *stream);
 
 /**
  * Return the remaining data in the stream's buffer.
