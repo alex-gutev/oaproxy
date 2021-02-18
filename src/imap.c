@@ -22,8 +22,12 @@
 #include "b64.h"
 
 #include "imap_cmd.h"
+#include "imap_reply.h"
 
 #define RECV_BUF_SIZE 512 * 4
+
+#define IMAP_CAP_AUTH "AUTH="
+#define IMAP_CAP_AUTH_LEN 5
 
 /**
  * Perform the initial IMAP authentication step.
@@ -105,6 +109,45 @@ static bool imap_auth_error(int fd, goa_error gerr, const char *tag);
  */
 static bool imap_login_syntax_error(int fd, const char *tag);
 
+
+/* Handling Server Replies */
+
+/**
+ * Handle a reply from the server.
+ *
+ * @param stream IMAP reply stream
+ * @param c_fd   Client socket descriptor
+ *
+ * @return True if the reply was handled successfully, false if there
+ *   was an error sending/receiving data.
+ */
+static bool handle_server_reply(struct imap_reply_stream *stream, int c_fd);
+
+/**
+ * Process a CAPABILITY response from the server. All AUTH= methods
+ * are removed as well as the LOGINDISABLED response before forwarding
+ * the response to the client.
+ *
+ * @param c_fd Client socket file descriptor
+ * @param reply IMAP reply
+ *
+ * @return True if the reply was handled successfully, false if there
+ *   was an error sending/receiving data.
+ */
+static bool send_capabilites(int c_fd, const struct imap_reply *reply);
+
+/**
+ * Skip past the current bytes in the data buffer until one byte past
+ * the next whitespace or till the nearest carriage return.
+ *
+ * @param data Data buffer.
+ *
+ * @param n On input pointer to size of buffer. On output this is
+ *   updated to the number of remaining bytes from the new position.
+ *
+ * @return Pointer to the new position in the buffer.
+ */
+static const char *skip_to_space(const char *data, size_t *n);
 
 /* Sending Data */
 
@@ -223,10 +266,12 @@ bool imap_authenticate(int c_fd, BIO * s_bio, int s_fd) {
     bool succ = true;
 
     struct imap_cmd_stream *c_stream = imap_cmd_stream_create(c_fd);
+    struct imap_reply_stream *s_stream = imap_reply_stream_create(s_bio);
+
     int maxfd = c_fd < s_fd ? s_fd : c_fd;
 
-    size_t c_n;
-    const char *c_data;
+    size_t c_n, s_n;
+    const char *c_data, *s_data;
 
     while (1) {
         fd_set rfds;
@@ -244,20 +289,7 @@ bool imap_authenticate(int c_fd, BIO * s_bio, int s_fd) {
         }
 
         if (FD_ISSET(s_fd, &rfds)) {
-            char s_data[RECV_BUF_SIZE];
-            ssize_t n = BIO_read(s_bio, s_data, sizeof(s_data));
-
-            if (n < 0) {
-                succ = false;
-                goto close;
-            }
-            else if (n == 0) {
-                syslog(LOG_USER | LOG_NOTICE, "IMAP: Server closed connection");
-                succ = false;
-                goto close;
-            }
-
-            if (!imap_client_send(c_fd, s_data, n)) {
+            if (!handle_server_reply(s_stream, c_fd)) {
                 succ = false;
                 goto close;
             }
@@ -283,7 +315,16 @@ finish:
         succ = imap_server_send(s_bio, c_data, c_n);
     }
 
+    // Send remaining server relies in buffer to client
+
+    s_data = imap_reply_buffer(s_stream, &s_n);
+
+    if (s_data) {
+        succ = imap_client_send(c_fd, s_data, s_n);
+    }
+
 close:
+    imap_reply_stream_free(s_stream);
     imap_cmd_stream_free(c_stream);
     return succ;
 }
@@ -448,6 +489,88 @@ bool imap_login_syntax_error(int fd, const char *tag) {
     free(err);
     return ret;
 }
+
+
+/* Handling Server Reply */
+
+bool handle_server_reply(struct imap_reply_stream *stream, int c_fd) {
+    struct imap_reply reply;
+    bool wait = true;
+
+    while (1) {
+        ssize_t s_n = imap_reply_next(stream, &reply, wait);
+
+        if (s_n < 0)
+            return false;
+        else if (s_n == 0)
+            return !wait;
+
+        switch (reply.code) {
+        case IMAP_REPLY_CAP:
+            if (!send_capabilites(c_fd, &reply))
+                return false;
+
+            break;
+
+        default:
+            if (!imap_client_send(c_fd, reply.line, reply.total_len))
+                return false;
+
+            break;
+        }
+
+        wait = false;
+    }
+}
+
+bool send_capabilites(int c_fd, const struct imap_reply *reply) {
+    const char *data = reply->data;
+    size_t n = reply->data_len;
+
+    char *new_cap = xmalloc(reply->total_len);
+    size_t pos = data - reply->line;
+
+    memcpy(new_cap, reply->line, pos);
+
+    while (n) {
+        if ((*data == 'A' || *data == 'a') &&
+            strncasecmp(data, IMAP_CAP_AUTH, IMAP_CAP_AUTH_LEN) == 0) {
+            data = skip_to_space(data, &n);
+            continue;
+        }
+
+        new_cap[pos++] = *data;
+        data++;
+        n--;
+
+    }
+
+    new_cap[pos++] = '\r';
+    new_cap[pos++] = '\n';
+
+    bool ret = imap_client_send(c_fd, new_cap, pos);
+    free(new_cap);
+
+    return ret;
+}
+
+const char *skip_to_space(const char *data, size_t *n) {
+    size_t sz = *n;
+    while (sz && *data != '\r' && *data != '\n') {
+        if (*data == ' ') {
+            sz--;
+            data++;
+            break;
+        }
+
+        data++;
+        sz--;
+    }
+
+    *n = sz;
+    return data;
+}
+
 
 /* Sending Data */
 
