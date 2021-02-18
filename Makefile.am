@@ -1,7 +1,7 @@
 bin_PROGRAMS = oaproxy
 
-oaproxy_LDADD = $(GOA_LIBS) $(OPENSSL_LIBS)
-oaproxy_CFLAGS = $(GOA_CFLAGS) $(OPENSSL_CFLAGS)
+oaproxy_LDADD = $(PTHREAD_LIBS) $(GOA_LIBS) $(OPENSSL_LIBS)
+oaproxy_CFLAGS = $(PTHREA_CFLAGS) $(GOA_CFLAGS) $(OPENSSL_CFLAGS)
 
 oaproxy_SOURCES = src/main.c \
 	src/xmalloc.c \

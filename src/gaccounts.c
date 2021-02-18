@@ -3,7 +3,7 @@
 #include <assert.h>
 #include <syslog.h>
 
-static GoaClient *client = NULL;
+static _Thread_local GoaClient *client = NULL;
 
 GoaClient *get_goaclient(GError ** error) {
     if (!client) {

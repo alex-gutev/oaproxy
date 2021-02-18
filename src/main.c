@@ -10,6 +10,7 @@
 #include <sys/socket.h>
 #include <netdb.h>
 #include <unistd.h>
+#include <pthread.h>
 
 #include "gaccounts.h"
 
@@ -39,6 +40,16 @@ struct proxy_server {
 };
 
 /**
+ * Represents a connection to a proxy server
+ */
+struct proxy_client {
+    /** Client socket file descriptor */
+    int fd;
+    /** Remote server details */
+    const struct proxy_server *server;
+};
+
+/**
  * Create a socket for a given proxy server.
  *
  * @param server Proxy server state.
@@ -57,6 +68,13 @@ static bool open_server_sock(struct proxy_server *server, int port);
  */
 static void run_servers(struct proxy_server *servers, size_t n);
 
+/**
+ * Thread start routine for handling a client connection.
+ *
+ * @param client Pointer to a proxy_client struct.
+ * @return NULL
+ */
+static void * handle_client(void *client);
 
 int main(int argc, char *argv[])
 {
@@ -180,16 +198,51 @@ void run_servers(struct proxy_server *servers, size_t n) {
                     continue;
                 }
 
-                switch (servers[i].type) {
-                case TYPE_SMTP:
-                    smtp_handle_client(clientfd, servers[i].host);
-                    break;
+                struct proxy_client *client = malloc(sizeof(struct proxy_client));
+                if (!client) {
+                    syslog(LOG_USER | LOG_CRIT, "Memory allocation failed");
+                    close(clientfd);
+                    continue;
+                }
 
-                case TYPE_IMAP:
-                    imap_handle_client(clientfd, servers[i].host);
-                    break;
+                client->fd = clientfd;
+                client->server = &servers[i];
+
+                pthread_t thread;
+
+                if (pthread_create(&thread, NULL, handle_client, client)) {
+                    syslog(LOG_USER | LOG_ERR, "Error creating new client thread: %m");
+
+                    close(clientfd);
+                    free(client);
                 }
             }
         }
     }
+}
+
+void * handle_client(void *obj) {
+    struct proxy_client *client = obj;
+    GError *error = NULL;
+
+    if (!get_goaclient(&error)) {
+        syslog(LOG_ERR | LOG_USER, "Could not create GoaClient: %s", error->message);
+
+        close(client->fd);
+        goto end;
+    }
+
+    switch (client->server->type) {
+    case TYPE_SMTP:
+        smtp_handle_client(client->fd, client->server->host);
+        break;
+
+    case TYPE_IMAP:
+        imap_handle_client(client->fd, client->server->host);
+        break;
+    }
+
+end:
+    free(client);
+    return NULL;
 }
