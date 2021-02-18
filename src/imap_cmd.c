@@ -287,11 +287,11 @@ char * parse_quoted_str(const char *data, size_t n) {
         }
 
         if (c == '\\' && n) {
-            str_buf[index] = *data++;
+            str_buf[index++] = *data++;
             n--;
         }
         else {
-            str_buf[index] = c;
+            str_buf[index++] = c;
         }
     }
 
