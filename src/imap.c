@@ -29,6 +29,9 @@
 #define IMAP_CAP_AUTH "AUTH="
 #define IMAP_CAP_AUTH_LEN 5
 
+#define IMAP_CAP_LOGINDISABLED "LOGINDISABLED"
+#define IMAP_CAP_LOGINDISABLED_LEN 13
+
 /**
  * Perform the initial IMAP authentication step.
  *
@@ -535,6 +538,13 @@ bool send_capabilites(int c_fd, const struct imap_reply *reply) {
     while (n) {
         if ((*data == 'A' || *data == 'a') &&
             strncasecmp(data, IMAP_CAP_AUTH, IMAP_CAP_AUTH_LEN) == 0) {
+            data = skip_to_space(data, &n);
+            continue;
+        }
+        else if ((*data == 'L' || *data == 'l') &&
+                 strncasecmp(data, IMAP_CAP_LOGINDISABLED, IMAP_CAP_LOGINDISABLED_LEN) &&
+                 (data[IMAP_CAP_LOGINDISABLED_LEN] == ' ' ||
+                  data[IMAP_CAP_LOGINDISABLED_LEN] == '\r')) {
             data = skip_to_space(data, &n);
             continue;
         }
