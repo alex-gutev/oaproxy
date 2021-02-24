@@ -14,4 +14,5 @@ oaproxy_SOURCES = src/main.c \
 	src/smtp_cmd.c \
 	src/imap.c \
 	src/imap_cmd.c \
-	src/imap_reply.c
+	src/imap_reply.c \
+	src/server.c
