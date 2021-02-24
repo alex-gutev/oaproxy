@@ -97,6 +97,17 @@ static char * parse_host(const char *line);
 static const char *skip_ws(const char *line);
 
 /**
+ * Handle incoming connections to the server sockets.
+ *
+ * @param set FD set of sockets which have an incoming connection.
+ *
+ * @param servers Array of proxy servers.
+ *
+ * @param n Number of proxy servers.
+ */
+static void handle_accept(const fd_set *set, struct proxy_server *servers, size_t n);
+
+/**
  * Thread start routine for handling a client connection.
  *
  * @param client Pointer to a proxy_client struct.
@@ -286,33 +297,37 @@ void run_servers(struct proxy_server *servers, size_t n) {
             break;
         }
 
-        for (int i = 0; i < n; ++i) {
-            if (FD_ISSET(servers[i].sock_fd, &rfds)) {
-                int clientfd = accept(servers[i].sock_fd, NULL, NULL);
+        handle_accept(&rfds, servers, n);
+    }
+}
 
-                if (clientfd < 0) {
-                    syslog(LOG_USER | LOG_ERR, "Error accepting client connection: %m");
-                    continue;
-                }
+void handle_accept(const fd_set *rfds, struct proxy_server *servers, size_t n) {
+    for (int i = 0; i < n; ++i) {
+        if (FD_ISSET(servers[i].sock_fd, rfds)) {
+            int clientfd = accept(servers[i].sock_fd, NULL, NULL);
 
-                struct proxy_client *client = malloc(sizeof(struct proxy_client));
-                if (!client) {
-                    syslog(LOG_USER | LOG_CRIT, "Memory allocation failed");
-                    close(clientfd);
-                    continue;
-                }
+            if (clientfd < 0) {
+                syslog(LOG_USER | LOG_ERR, "Error accepting client connection: %m");
+                continue;
+            }
 
-                client->fd = clientfd;
-                client->server = &servers[i];
+            struct proxy_client *client = malloc(sizeof(struct proxy_client));
+            if (!client) {
+                syslog(LOG_USER | LOG_CRIT, "Memory allocation failed");
+                close(clientfd);
+                continue;
+            }
 
-                pthread_t thread;
+            client->fd = clientfd;
+            client->server = &servers[i];
 
-                if (pthread_create(&thread, NULL, handle_client, client)) {
-                    syslog(LOG_USER | LOG_ERR, "Error creating new client thread: %m");
+            pthread_t thread;
 
-                    close(clientfd);
-                    free(client);
-                }
+            if (pthread_create(&thread, NULL, handle_client, client)) {
+                syslog(LOG_USER | LOG_ERR, "Error creating new client thread: %m");
+
+                close(clientfd);
+                free(client);
             }
         }
     }
