@@ -33,12 +33,6 @@ int main(int argc, char *argv[])
 
     assert(n_servers > 0);
 
-    for (int i = 0; i < n_servers; ++i) {
-        if (!open_server_sock(servers + i, servers[i].port)) {
-            return 1;
-        }
-    }
-
     run_servers(servers, n_servers);
     destroy_ssl();
 

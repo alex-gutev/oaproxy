@@ -129,11 +129,13 @@ struct proxy_server *parse_servers(const char *path, size_t *n) {
             servers = xrealloc(servers, size * sizeof(struct proxy_server));
         }
 
-        if (parse_line(servers + num, line)) {
-            num++;
-        }
-        else {
+        if (!parse_line(servers + num, line)) {
             syslog(LOG_USER | LOG_ERR, "Config Parse Error: Error parsing line %lu", line_i);
+            continue;
+        }
+
+        if (open_server_sock(servers + num, servers[num].port)) {
+            num++;
         }
     }
 
