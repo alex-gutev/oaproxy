@@ -12,19 +12,16 @@
 
 int main(int argc, char *argv[])
 {
-    setlocale(LC_ALL, "");
+    const char *conf = argc >= 2 ? argv[1] : SYSCONFDIR "/oaproxy.conf";
 
-    if (argc < 2) {
-        fputs("Usage: oaproxy [config file]\n", stderr);
-        return 1;
-    }
+    setlocale(LC_ALL, "");
 
     openlog(NULL, LOG_PID | LOG_PERROR, LOG_USER);
 
     initialize_ssl();
 
     size_t n_servers;
-    struct proxy_server *servers = parse_servers(argv[1], &n_servers);
+    struct proxy_server *servers = parse_servers(conf, &n_servers);
 
     if (!servers) {
         syslog(LOG_USER | LOG_ERR, "Could not parse server settings from config file: %s", argv[1]);
