@@ -1,0 +1,13 @@
+[Unit]
+Description=OAProxy - IMAP/SMTP OAUTH2 authentication proxy
+Requires=dbus.service
+After=network.target dbus.service
+
+[Service]
+Type=simple
+Restart=always
+RestartSec=1
+ExecStart=@bindir@/oaproxy
+
+[Install]
+WantedBy=multi-user.target
