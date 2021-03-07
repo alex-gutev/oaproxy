@@ -10,4 +10,4 @@ RestartSec=1
 ExecStart=@bindir@/oaproxy
 
 [Install]
-WantedBy=multi-user.target
+WantedBy=default.target
