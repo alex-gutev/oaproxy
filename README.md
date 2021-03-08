@@ -40,9 +40,9 @@ prior to building.
 
 ### Compilation
 
-Download the latest version from Releases. Unpack the archive and
-navigate to a directory of your choice and navigate to that
-directory. Run the following commands
+Download the latest version from Releases. Unpack the archive to a
+directory of your choice and navigate to that directory. Run the
+following commands:
 
 ```sh
 ./configure
@@ -115,7 +115,7 @@ This specifies that OAProxy will listen for **SMTP** connections on
 
     IMAP 3002 imap.gmail.com:993
 	
-This specifies that OAProxy will for **IMAP** connections on
+This specifies that OAProxy will listen for **IMAP** connections on
 `localhost` port 3002 and will forward the data to the server
 `imap.gmail.com` on port 993.
 
@@ -150,8 +150,8 @@ and SMTP. For example in Claws and Sylpheed go to the `SSL` settings
 for your account and check the `Don't use SSL` radio button. This does
 not mean your data is transmitted over the Internet in plain text,
 OAProxy communicates with the remote server over TLS. Only the
-communication between your email client and OAProxy happens in plain
-text.
+communication between your email client and OAProxy, which is local to
+the machine, happens in plain text.
 
 ### IMAP (Receiving Mail) Settings
 
