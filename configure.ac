@@ -16,6 +16,13 @@ AX_PTHREAD
 PKG_CHECK_MODULES([GOA], [goa-1.0 >= 3.28])
 PKG_CHECK_MODULES([OPENSSL], [openssl >= 1.1.1])
 
+# Unit Testing
+
+PKG_CHECK_MODULES([CMOCKA], [cmocka],
+    [AC_DEFINE([HAVE_CMOCKA], [1], [Found cmocka unit test library.])],
+    [AC_DEFINE([HACE_CMOCKA], [0], [Found cmocka unit test library.])]
+)
+
 # Systemd
 
 AC_ARG_WITH([systemduserunitdir],

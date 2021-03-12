@@ -40,5 +40,17 @@ if HAVE_SYSTEMD
 systemduserunit_DATA = oaproxy.service
 endif
 
-# systemdsysdir = $(sysconfdir)/systemd/system
-# systemdsys_DATA = oaproxy.service
+
+## Testing
+
+check_PROGRAMS = test-b64
+
+TESTS = test-b64
+
+# Base64 Encoding/Decoding Tests
+
+test_b64_SOURCES = test/b64.c
+test_b64_CFLAGS = -I$(top_srcdir)/src $(CMOCKA_CFLAGS)
+test_b64_LDADD = $(CMOCKA_LIBS) \
+	src/oaproxy-xmalloc.$(OBJEXT) \
+	src/oaproxy-b64.$(OBJEXT)
