@@ -83,8 +83,9 @@ char *base64_decode(const char *data, size_t *size) {
     int state = 0;
     size_t pos = 0;
 
-    while (n--) {
+    while (n) {
         char chr = *data++;
+        n--;
 
         if (chr == '=') break;
         unsigned char index = char_to_index(chr);
