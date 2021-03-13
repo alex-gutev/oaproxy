@@ -6,7 +6,7 @@ AM_DISTCHECK_CONFIGURE_FLAGS = \
 bin_PROGRAMS = oaproxy
 
 oaproxy_LDADD = $(PTHREAD_LIBS) $(GOA_LIBS) $(OPENSSL_LIBS)
-oaproxy_CFLAGS = $(PTHREA_CFLAGS) $(GOA_CFLAGS) $(OPENSSL_CFLAGS) -DSYSCONFDIR='"${sysconfdir}"'
+oaproxy_CFLAGS = $(PTHREAD_CFLAGS) $(GOA_CFLAGS) $(OPENSSL_CFLAGS) -DSYSCONFDIR='"${sysconfdir}"'
 
 oaproxy_SOURCES = src/main.c \
 	src/xmalloc.c \
