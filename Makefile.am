@@ -43,9 +43,9 @@ endif
 
 ## Testing
 
-check_PROGRAMS = test-b64
+check_PROGRAMS = test-b64 test-xoauth2
 
-TESTS = test-b64
+TESTS = test-b64 test-xoauth2
 
 # Base64 Encoding/Decoding Tests
 
@@ -54,3 +54,12 @@ test_b64_CFLAGS = -I$(top_srcdir)/src $(CMOCKA_CFLAGS)
 test_b64_LDADD = $(CMOCKA_LIBS) \
 	src/oaproxy-xmalloc.$(OBJEXT) \
 	src/oaproxy-b64.$(OBJEXT)
+
+# XOAUTH2 Token Generation Tests
+
+test_xoauth2_SOURCES = test/xoauth2.c
+test_xoauth2_CFLAGS = -I$(top_srcdir)/src $(CMOCKA_FLAGS)
+test_xoauth2_LDADD = $(CMOCKA_LIBS) \
+	src/oaproxy-xmalloc.$(OBJEXT) \
+	src/oaproxy-b64.$(OBJEXT) \
+	src/oaproxy-xoauth2.$(OBJEXT)
