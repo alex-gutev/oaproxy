@@ -43,9 +43,9 @@ endif
 
 ## Testing
 
-check_PROGRAMS = test-b64 test-xoauth2
+check_PROGRAMS = test-b64 test-xoauth2 test-smtp_cmd
 
-TESTS = test-b64 test-xoauth2
+TESTS = test-b64 test-xoauth2 test-smtp_cmd
 
 # Base64 Encoding/Decoding Tests
 
@@ -63,3 +63,12 @@ test_xoauth2_LDADD = $(CMOCKA_LIBS) \
 	src/oaproxy-xmalloc.$(OBJEXT) \
 	src/oaproxy-b64.$(OBJEXT) \
 	src/oaproxy-xoauth2.$(OBJEXT)
+
+# SMTP Command Parser
+
+test_smtp_cmd_SOURCES = test/smtp_cmd.c
+test_smtp_cmd_CFLAGS = -I$(top_srcdir)/src $(CMOCKA_FLAGS)
+test_smtp_cmd_LDADD = $(CMOCKA_LIBS) \
+	src/oaproxy-xmalloc.$(OBJEXT) \
+	src/oaproxy-smtp_cmd.$(OBJEXT) \
+	 $(OPENSSL_LIBS)
