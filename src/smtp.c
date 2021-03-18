@@ -204,9 +204,6 @@ void smtp_handle_client(int c_fd, const char *host) {
 
 close_server:
     BIO_free_all(bio);
-
-close_client:
-    close(c_fd);
 }
 
 

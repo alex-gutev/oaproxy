@@ -44,14 +44,16 @@ struct smtp_cmd {
 /**
  * Create an SMTP command stream.
  *
- * @param fd SMTP client socket file descriptor
+ * @param fd SMTP client socket file descriptor. The stream takes
+ *   responsibility of closing the file.
  *
  * @return Pointer to the smtp_cmd_stream struct
  */
 struct smtp_cmd_stream * smtp_cmd_stream_create(int fd);
 
 /**
- * Free the memory held by an SMTP command stream.
+ * Free the memory held by an SMTP command stream, and close the
+ * underlying socket.
  *
  * @param stream Pointer to SMTP command stream.
  */
