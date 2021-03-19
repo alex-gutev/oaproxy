@@ -113,7 +113,7 @@ free_sbio:
 void smtp_cmd_stream_free(struct smtp_cmd_stream *stream) {
     assert(stream != NULL);
 
-    BIO_free(stream->bio);
+    BIO_free_all(stream->bio);
     free(stream);
 }
 
