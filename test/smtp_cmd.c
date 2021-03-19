@@ -18,8 +18,6 @@
 #define smtp_cmd_unit_test(f) cmocka_unit_test_setup_teardown(f, smtp_test_setup, smtp_test_teardown)
 
 struct test_state {
-    // Server side socket
-    int s_fd;
     // Client side socket
     int c_fd;
 
@@ -36,11 +34,12 @@ static int smtp_test_setup(void ** state) {
 
     struct test_state *tstate = xmalloc(sizeof(struct test_state));
 
-    tstate->s_fd = sv[0];
-    tstate->c_fd = sv[1];
+    tstate->c_fd = sv[0];
 
-    tstate->stream = smtp_cmd_stream_create(tstate->s_fd);
+    tstate->stream = smtp_cmd_stream_create(sv[1]);
     if (!tstate->stream) {
+        close(sv[0]);
+        close(sv[1]);
         return 1;
     }
 
@@ -230,6 +229,7 @@ static void test_cmd_malformed2(void ** state) {
 
     // Close to prevent read from blocking
     close(tstate->c_fd);
+    tstate->c_fd = -1;
 
     // Read command
     struct smtp_cmd cmd;
@@ -257,6 +257,7 @@ static void test_data_state(void ** state) {
 
     // Close to prevent blocking
     close(tstate->c_fd);
+    tstate->c_fd = -1;
 
     // Switch to data state
     smtp_cmd_stream_data_mode(tstate->stream, true);
