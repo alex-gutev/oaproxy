@@ -72,14 +72,16 @@ struct smtp_reply {
 /**
  * Create an SMTP reply stream.
  *
- * @param bio SMTP Server OpenSSL BIO object.
+ * @param bio SMTP Server OpenSSL BIO object. The stream takes
+ *   responsibility for freeing the BIO.
  *
  * @return The smtp_reply_stream struct.
  */
 struct smtp_reply_stream * smtp_reply_stream_create(BIO *bio);
 
 /**
- * Free the memory held by an SMTP reply stream.
+ * Free the memory held by an SMTP reply stream and free the
+ * underlying BIO stream.
  *
  * @param stream Pointer to the smtp_reply_stream struct.
  */

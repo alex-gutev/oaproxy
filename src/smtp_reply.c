@@ -11,16 +11,11 @@
 #define OAP_STREAM_BUF_SIZE 1024
 
 #define STATUS_AUTH "AUTH "
-#define STATUS_AUTH_LEN 5
+#define STATUS_AUTH_LEN strlen(STATUS_AUTH)
 
 struct smtp_reply_stream {
     /** SMTP server OpenSSL BIO object */
     BIO *bio;
-
-    /**
-     * Offset into the data buffer of the next reply data to process
-     */
-    size_t offset;
 
     /**
      * Number of bytes in data buffer
@@ -34,109 +29,72 @@ struct smtp_reply_stream {
 };
 
 /**
- * Determine the length of the reply line.
+ * Determine the length of the reply line, excluding the terminating
+ * CRLF.
  *
  * @param data Pointer to the start of the reply line.
- *
  * @param size Number of bytes read.
  *
- * @param data_len Pointer to size_t in which the length of the reply
- *   line, excluding the terminating CRLF is stored.
- *
- * @param total_len Pointer to size_t in which the total length of the
- *   reply line is stored.
- *
- * @return True if the reply is a complete line, false if there is
- *   more data to be read.
+ * @return Length of reply line excluding CRLF.
  */
-static bool reply_length(const char *data, size_t size, size_t *data_len, size_t *total_len);
+static size_t reply_length(const char *data, size_t size);
 
 
 /* Implementation */
 
 struct smtp_reply_stream * smtp_reply_stream_create(BIO *bio) {
+    // Create buffered BIO stream
+    BIO *bbio = BIO_new(BIO_f_buffer());
+    if (!bbio) return NULL;
+
+    // Chain BIO streams
+    BIO *chain = BIO_push(bbio, bio);
+    if (!chain) {
+        BIO_free_all(bbio);
+        return NULL;
+    }
+
     struct smtp_reply_stream *stream = xmalloc(sizeof(struct smtp_reply_stream));
 
-    stream->bio = bio;
-    stream->offset = stream->size = 0;
+    stream->bio = chain;
+    stream->size = 0;
 
     return stream;
 }
 
 void smtp_reply_stream_free(struct smtp_reply_stream *stream) {
     assert(stream != NULL);
+
+    BIO_free_all(stream->bio);
     free(stream);
 }
 
 ssize_t smtp_reply_next(struct smtp_reply_stream *stream, struct smtp_reply *reply) {
-    while (1) {
-        // Check if there is data left in the stream buffer
-        if (stream->offset < stream->size) {
-            size_t data_len, total_len;
-            bool complete = reply_length(stream->data + stream->offset, stream->size - stream->offset, &data_len, &total_len);
+    ssize_t n = BIO_gets(stream->bio, stream->data, OAP_STREAM_BUF_SIZE);
 
-            // If complete return reply
-            if (complete) {
-                reply->data = stream->data + stream->offset;
-                reply->data_len = data_len;
-                reply->total_len = total_len;
-
-                stream->offset += total_len;
-
-                return reply->total_len;
-            }
-
-            // Move partial reply to beginning of buffer
-            if (stream->offset) {
-                memmove(stream->data, stream->data + stream->offset, data_len);
-                stream->offset = 0;
-                stream->size = data_len;
-            }
-        }
-        else {
-            stream->offset = 0;
-            stream->size = 0;
-        }
-
-        // Read next block of data
-        ssize_t n = BIO_read(stream->bio, stream->data + stream->size, OAP_STREAM_BUF_SIZE - stream->size);
-
-        if (n < 0) {
-            ssl_log_error("Error reading SMTP server response");
-            return n;
-        }
-        else if (n == 0) {
-            // Returning 0 directly since the last line was incomplete anyway.
-
-            syslog(LOG_USER | LOG_NOTICE, "SMTP server closed connection");
-            return 0;
-        }
-
-        stream->size += n;
+    if (n <= 0) {
+        return n;
     }
+
+    stream->size = n;
+
+    reply->data = stream->data;
+    reply->data_len = reply_length(stream->data, stream->size);
+    reply->total_len = stream->size;
+
+    return n;
 }
 
-static bool reply_length(const char *data, size_t size, size_t *data_len, size_t *total_len) {
-    *data_len = 0;
-    *total_len = 0;
-
-    while (size--) {
-        if (*data == '\r' && size && data[1] == '\n') {
-            *total_len += 2;
-            return true;
-        }
-        else if (*data == '\n') {
-            *total_len += 1;
-            return true;
+static size_t reply_length(const char *data, size_t size) {
+    if (size >= 1 && data[size-1] == '\n') {
+        if (size >= 2 && data[size-2] == '\r') {
+            return size - 2;
         }
 
-        data++;
-
-        *data_len += 1;
-        *total_len += 1;
+        return size - 1;
     }
 
-    return false;
+    return size;
 }
 
 
@@ -182,8 +140,7 @@ bool smtp_reply_parse(struct smtp_reply *status) {
 
     /* Parse Status Type */
 
-    if (len > STATUS_AUTH_LEN &&
-        strncasecmp(STATUS_AUTH, data, STATUS_AUTH_LEN) == 0) {
+    if (strncasecmp(STATUS_AUTH, data, STATUS_AUTH_LEN) == 0) {
         status->type = SMTP_REPLY_AUTH;
     }
     else {

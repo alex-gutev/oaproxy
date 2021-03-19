@@ -166,7 +166,7 @@ void smtp_handle_client(int c_fd, const char *host) {
     if (BIO_do_connect(bio) <= 0) {
         syslog(LOG_USER | LOG_ERR, "Error connecting to SMTP host: %s", host);
         ssl_log_error(NULL);
-        goto close_server;
+        return;
     }
 
     int s_fd = BIO_get_fd(bio, NULL);
@@ -201,9 +201,6 @@ void smtp_handle_client(int c_fd, const char *host) {
 
     smtp_cmd_stream_free(c_stream);
     smtp_reply_stream_free(s_stream);
-
-close_server:
-    BIO_free_all(bio);
 }
 
 
