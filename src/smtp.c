@@ -152,7 +152,7 @@ void smtp_handle_client(int c_fd, const char *host) {
     SSL_CTX *ctx = SSL_CTX_new(SSLv23_client_method());
     if (ctx == NULL) {
         ssl_log_error("Error loading SSL context");
-        goto close_client;
+        return;
     }
 
     BIO *bio = BIO_new_ssl_connect(ctx);
