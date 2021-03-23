@@ -149,23 +149,10 @@ static bool smtp_server_handle_reply(int c_fd, struct smtp_reply_stream *s_strea
 /* Implementation */
 
 void smtp_handle_client(int c_fd, const char *host) {
-    SSL_CTX *ctx = SSL_CTX_new(SSLv23_client_method());
-    if (ctx == NULL) {
-        ssl_log_error("Error loading SSL context");
-        return;
-    }
+    BIO *bio = server_connect(host);
 
-    BIO *bio = BIO_new_ssl_connect(ctx);
-    SSL *ssl;
-
-    BIO_get_ssl(bio, &ssl);
-    SSL_set_mode(ssl, SSL_MODE_AUTO_RETRY);
-
-    BIO_set_conn_hostname(bio, host);
-
-    if (BIO_do_connect(bio) <= 0) {
-        syslog(LOG_USER | LOG_ERR, "Error connecting to SMTP host: %s", host);
-        ssl_log_error(NULL);
+    if (!bio) {
+        close(c_fd);
         return;
     }
 
@@ -173,7 +160,19 @@ void smtp_handle_client(int c_fd, const char *host) {
     int maxfd = c_fd < s_fd ? s_fd : c_fd;
 
     struct smtp_cmd_stream * c_stream = smtp_cmd_stream_create(c_fd);
+
+    if (!c_stream) {
+        BIO_free_all(bio);
+        close(c_fd);
+        return;
+    }
+
     struct smtp_reply_stream * s_stream = smtp_reply_stream_create(bio);
+
+    if (!s_stream) {
+        BIO_free_all(bio);
+        goto close_cmd_stream;
+    }
 
     while (1) {
         fd_set rfds;
@@ -193,14 +192,16 @@ void smtp_handle_client(int c_fd, const char *host) {
             if (!smtp_server_handle_reply(c_fd, s_stream, c_stream))
                 break;
         }
-        else if (FD_ISSET(c_fd, &rfds)) {
+        if (FD_ISSET(c_fd, &rfds)) {
             if (!smtp_client_handle_cmd(c_stream, bio))
                 break;
         }
     }
 
-    smtp_cmd_stream_free(c_stream);
     smtp_reply_stream_free(s_stream);
+
+close_cmd_stream:
+    smtp_cmd_stream_free(c_stream);
 }
 
 

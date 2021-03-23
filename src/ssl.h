@@ -1,6 +1,8 @@
 #ifndef OAPROXY_SSL_H
 #define OAPROXY_SSL_H
 
+#include <openssl/bio.h>
+
 /* SSL Utility Functions */
 
 /**
@@ -20,5 +22,13 @@ void destroy_ssl(void);
  */
 void ssl_log_error(const char *msg);
 
+/**
+ * Connect to a server using a TLS/SSL connection.
+ *
+ * @param host Server host to connect to.
+ *
+ * @return BIO stream if connection was successful. NULL otherwise.
+ */
+BIO *server_connect(const char *host);
 
 #endif /* OAPROXY_SSL_H */
