@@ -434,6 +434,8 @@ static void test_auth_cmd1(void ** state) {
 
     // Write auth command
 
+    // Credentials: \0user1@example.com\0
+
     test_proxy2(tstate->c_fd_in, tstate->s_fd_in,
                 "AUTH PLAIN AHVzZXIxQGV4YW1wbGUuY29tAA==\r\n",
                 "AUTH XOAUTH2 dXNlcj11c2VyMUBleGFtcGxlLmNvbQFhdXRoPUJlYXJlciB0b2t1c2VyMWFiYwEB\r\n");
@@ -451,6 +453,172 @@ static void test_auth_cmd1(void ** state) {
     assert_int_equal(smtp_exit_status(tstate), 0);
 }
 
+static void test_auth_cmd2(void ** state) {
+    struct test_state *tstate = *state;
+
+    // Write initial server reply
+
+    test_proxy(tstate->s_fd_in, tstate->c_fd_in, "220 smtp.example.com ESMTP\r\n");
+
+    // Write auth command
+
+    // Credentials: \0user1@example.com\0pass123
+
+    test_proxy2(tstate->c_fd_in, tstate->s_fd_in,
+                "AUTH PLAIN AHVzZXIxQGV4YW1wbGUuY29tAHBhc3MxMjM=\r\n",
+                "AUTH XOAUTH2 dXNlcj11c2VyMUBleGFtcGxlLmNvbQFhdXRoPUJlYXJlciB0b2t1c2VyMWFiYwEB\r\n");
+
+
+    // Write server response
+
+    test_proxy(tstate->s_fd_in, tstate->c_fd_in, "235 Accepted\r\n");
+
+    // Write next client command
+
+    test_proxy(tstate->c_fd_in, tstate->s_fd_in, "QUIT\r\n");
+
+    // Check exit status
+    assert_int_equal(smtp_exit_status(tstate), 0);
+}
+
+static void test_auth_cmd3(void ** state) {
+    struct test_state *tstate = *state;
+
+    // Write initial server reply
+
+    test_proxy(tstate->s_fd_in, tstate->c_fd_in, "220 smtp.example.com ESMTP\r\n");
+
+    // Write auth command
+
+    // Credentials: blah\0user1@example.com\0pass123
+
+    test_proxy2(tstate->c_fd_in, tstate->s_fd_in,
+                "AUTH PLAIN YmxhaAB1c2VyMUBleGFtcGxlLmNvbQBwYXNzMTIz\r\n",
+                "AUTH XOAUTH2 dXNlcj11c2VyMUBleGFtcGxlLmNvbQFhdXRoPUJlYXJlciB0b2t1c2VyMWFiYwEB\r\n");
+
+
+    // Write server response
+
+    test_proxy(tstate->s_fd_in, tstate->c_fd_in, "235 Accepted\r\n");
+
+    // Write next client command
+
+    test_proxy(tstate->c_fd_in, tstate->s_fd_in, "QUIT\r\n");
+
+    // Check exit status
+    assert_int_equal(smtp_exit_status(tstate), 0);
+}
+
+static void test_auth_cmd4(void ** state) {
+    struct test_state *tstate = *state;
+
+    // Write initial server reply
+
+    test_proxy(tstate->s_fd_in, tstate->c_fd_in, "220 smtp.example.com ESMTP\r\n");
+
+    // Write auth command
+
+    test_proxy2(tstate->c_fd_in, tstate->c_fd_in,
+                "AUTH PLAIN\r\n", "334\r\n");
+
+    // Credentials: blah\0user1@example.com\0pass123
+
+    test_proxy2(tstate->c_fd_in, tstate->s_fd_in,
+                "YmxhaAB1c2VyMUBleGFtcGxlLmNvbQBwYXNzMTIz\r\n",
+                "AUTH XOAUTH2 dXNlcj11c2VyMUBleGFtcGxlLmNvbQFhdXRoPUJlYXJlciB0b2t1c2VyMWFiYwEB\r\n");
+
+
+    // Write server response
+
+    test_proxy(tstate->s_fd_in, tstate->c_fd_in, "235 Accepted\r\n");
+
+    // Write next client command
+
+    test_proxy(tstate->c_fd_in, tstate->s_fd_in, "QUIT\r\n");
+
+    // Check exit status
+    assert_int_equal(smtp_exit_status(tstate), 0);
+}
+
+static void test_auth_cmd5(void ** state) {
+    struct test_state *tstate = *state;
+
+    // Write initial server reply
+
+    test_proxy(tstate->s_fd_in, tstate->c_fd_in, "220 smtp.example.com ESMTP\r\n");
+
+    // Write auth command
+
+    // Invalid Credentials: test\0user2@mail.com\0
+    test_proxy2(tstate->c_fd_in, tstate->c_fd_in,
+                "AUTH PLAIN dGVzdAB1c2VyMkBtYWlsLmNvbQA=\r\n",
+                "535 Invalid username or password\r\n");
+
+    // Write next client command
+
+    test_proxy(tstate->c_fd_in, tstate->s_fd_in, "QUIT\r\n");
+
+    // Check exit status
+    assert_int_equal(smtp_exit_status(tstate), 0);
+}
+
+static void test_auth_cmd6(void ** state) {
+    struct test_state *tstate = *state;
+
+    // Write initial server reply
+
+    test_proxy(tstate->s_fd_in, tstate->c_fd_in, "220 smtp.example.com ESMTP\r\n");
+
+    // Write auth command
+
+    // Invalid Syntax Credentials: user2@mail.com
+    test_proxy2(tstate->c_fd_in, tstate->c_fd_in,
+                "AUTH PLAIN dXNlcjJAbWFpbC5jb20=\r\n",
+                "501 Syntax error in credentials\r\n");
+
+    // Write next client command
+
+    test_proxy(tstate->c_fd_in, tstate->s_fd_in, "QUIT\r\n");
+
+    // Check exit status
+    assert_int_equal(smtp_exit_status(tstate), 0);
+}
+
+static void test_auth_cmd7(void ** state) {
+    struct test_state *tstate = *state;
+
+    // Write initial server reply
+
+    test_proxy(tstate->s_fd_in, tstate->c_fd_in, "220 smtp.example.com ESMTP\r\n");
+
+    // Write auth command
+
+    test_proxy2(tstate->c_fd_in, tstate->c_fd_in,
+                "AUTH PLAIN notbase64*&$\r\n",
+                "501 Syntax error in credentials\r\n");
+
+    // Write next client command
+
+    test_proxy(tstate->c_fd_in, tstate->s_fd_in, "QUIT\r\n");
+
+    // Check exit status
+    assert_int_equal(smtp_exit_status(tstate), 0);
+}
+
+static void test_auth_cmd_other(void ** state) {
+    struct test_state *tstate = *state;
+
+    // Write initial server reply
+
+    test_proxy(tstate->s_fd_in, tstate->c_fd_in, "220 smtp.example.com ESMTP\r\n");
+
+    // Write first client command
+
+    test_proxy(tstate->c_fd_in, tstate->s_fd_in, "AUTH LOGIN\r\n");
+
+    // Check exit status
+    assert_int_equal(smtp_exit_status(tstate), 0);
+}
 
 /* Main Function */
 
@@ -460,7 +628,15 @@ int main(void)
         smtp_cmd_unit_test(test_simple_proxy),
         smtp_cmd_unit_test(test_auth_reply1),
         smtp_cmd_unit_test(test_auth_reply2),
-        smtp_cmd_unit_test(test_auth_cmd1)
+
+        smtp_cmd_unit_test(test_auth_cmd1),
+        smtp_cmd_unit_test(test_auth_cmd2),
+        smtp_cmd_unit_test(test_auth_cmd3),
+        smtp_cmd_unit_test(test_auth_cmd4),
+        smtp_cmd_unit_test(test_auth_cmd5),
+        smtp_cmd_unit_test(test_auth_cmd6),
+        smtp_cmd_unit_test(test_auth_cmd7),
+        smtp_cmd_unit_test(test_auth_cmd_other)
     };
 
     return cmocka_run_group_tests(tests, NULL, NULL);
