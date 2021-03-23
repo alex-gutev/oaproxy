@@ -219,6 +219,23 @@ static int smtp_exit_status(struct test_state *state) {
 static ssize_t read_data(int fd, char *buf, size_t size, size_t min) {
     size_t total = 0;
     while (total < min) {
+        fd_set rfds;
+
+        FD_ZERO(&rfds);
+        FD_SET(fd, &rfds);
+
+        struct timeval tv;
+        tv.tv_sec = 10;
+        tv.tv_usec = 0;
+
+        // Wait for data to be arrive with a timeout.
+        if (select(fd + 1, &rfds, NULL, NULL, &tv) < 0)
+            return -1;
+
+        if (!FD_ISSET(fd, &rfds)) {
+            break;
+        }
+
         ssize_t n = read(fd, buf, size);
 
         if (n < 0) return n;
