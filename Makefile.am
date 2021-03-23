@@ -96,4 +96,6 @@ test_smtp_LDADD = $(CMOCKA_LIBS) \
 	src/oaproxy-smtp.$(OBJEXT) \
 	 $(OPENSSL_LIBS) $(GOA_LIBS)
 
-test_smtp_LDFLAGS = -Wl,--wrap=server_connect
+test_smtp_LDFLAGS = -Wl,--wrap=server_connect \
+	-Wl,--wrap=find_goaccount \
+	-Wl,--wrap=get_access_token

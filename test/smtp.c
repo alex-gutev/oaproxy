@@ -5,6 +5,7 @@
 #include <string.h>
 #include <stdlib.h>
 #include <stdbool.h>
+#include <assert.h>
 
 #include <errno.h>
 #include <pthread.h>
@@ -20,7 +21,12 @@
 #include "ssl.h"
 #include "smtp.h"
 
+#include "gaccounts.h"
+
 #define LOCAL_SERVER "localhost:123"
+
+#define USER1_ID "user1@example.com"
+#define USER1_TOK "tokuser1abc"
 
 /* Mocked Functions */
 
@@ -37,6 +43,19 @@ BIO *__wrap_server_connect(const char *host) {
     }
 
     return __real_server_connect(host);
+}
+
+GList *__wrap_find_goaccount(GList *accounts, const char *user) {
+    if (!strcmp(user, USER1_ID)) {
+        return g_list_prepend(NULL, USER1_TOK);
+    }
+
+    return NULL;
+}
+
+gchar *__wrap_get_access_token(GList *account, goa_error *gerr) {
+    assert(account);
+    return strdup(account->data);
 }
 
 /* Server Process Routine */
@@ -386,6 +405,36 @@ static void test_auth_reply2(void ** state) {
     assert_int_equal(smtp_exit_status(tstate), 0);
 }
 
+
+/* Test AUTH Client Commands */
+
+static void test_auth_cmd1(void ** state) {
+    struct test_state *tstate = *state;
+
+    // Write initial server reply
+
+    test_proxy(tstate->s_fd_in, tstate->c_fd_in, "220 smtp.example.com ESMTP\r\n");
+
+    // Write auth command
+
+    test_proxy2(tstate->c_fd_in, tstate->s_fd_in,
+                "AUTH PLAIN AHVzZXIxQGV4YW1wbGUuY29tAA==\r\n",
+                "AUTH XOAUTH2 dXNlcj11c2VyMUBleGFtcGxlLmNvbQFhdXRoPUJlYXJlciB0b2t1c2VyMWFiYwEB\r\n");
+
+
+    // Write server response
+
+    test_proxy(tstate->s_fd_in, tstate->c_fd_in, "235 Accepted\r\n");
+
+    // Write next client command
+
+    test_proxy(tstate->c_fd_in, tstate->s_fd_in, "QUIT\r\n");
+
+    // Check exit status
+    assert_int_equal(smtp_exit_status(tstate), 0);
+}
+
+
 /* Main Function */
 
 int main(void)
@@ -393,7 +442,8 @@ int main(void)
     const struct CMUnitTest tests[] = {
         smtp_cmd_unit_test(test_simple_proxy),
         smtp_cmd_unit_test(test_auth_reply1),
-        smtp_cmd_unit_test(test_auth_reply2)
+        smtp_cmd_unit_test(test_auth_reply2),
+        smtp_cmd_unit_test(test_auth_cmd1)
     };
 
     return cmocka_run_group_tests(tests, NULL, NULL);
