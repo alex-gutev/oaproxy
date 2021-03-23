@@ -43,9 +43,9 @@ endif
 
 ## Testing
 
-check_PROGRAMS = test-b64 test-xoauth2 test-smtp_cmd test-smtp_reply
+check_PROGRAMS = test-b64 test-xoauth2 test-smtp_cmd test-smtp_reply test-smtp
 
-TESTS = test-b64 test-xoauth2 test-smtp_cmd test-smtp_reply
+TESTS = test-b64 test-xoauth2 test-smtp_cmd test-smtp_reply test-smtp
 
 # Base64 Encoding/Decoding Tests
 
@@ -82,3 +82,20 @@ test_smtp_reply_LDADD = $(CMOCKA_LIBS) \
 	src/oaproxy-ssl.$(OBJEXT) \
 	src/oaproxy-smtp_reply.$(OBJEXT) \
 	 $(OPENSSL_LIBS)
+
+# SMTP Proxy Server
+
+test_smtp_SOURCES = test/smtp.c
+test_smtp_CFLAGS = -I$(top_srcdir)/src $(CMOCKA_FLAGS) $(OPENSSL_CFLAGS) $(GOA_CFLAGS)
+test_smtp_LDADD = $(CMOCKA_LIBS) \
+	src/oaproxy-xmalloc.$(OBJEXT) \
+	src/oaproxy-ssl.$(OBJEXT) \
+	src/oaproxy-b64.$(OBJEXT) \
+	src/oaproxy-gaccounts.$(OBJEXT) \
+	src/oaproxy-xoauth2.$(OBJEXT) \
+	src/oaproxy-smtp_cmd.$(OBJEXT) \
+	src/oaproxy-smtp_reply.$(OBJEXT) \
+	src/oaproxy-smtp.$(OBJEXT) \
+	 $(OPENSSL_LIBS) $(GOA_LIBS)
+
+test_smtp_LDFLAGS = -Wl,--wrap=server_connect
