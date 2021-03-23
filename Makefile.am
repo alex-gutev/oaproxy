@@ -29,8 +29,6 @@ dist_sysconf_DATA = oaproxy.conf
 
 ## Service File
 
-SED = @SED@
-
 SERVICE_SUBS = s,[@]bindir[@],$(bindir),g
 
 oaproxy.service: oaproxy.service.in
@@ -67,7 +65,7 @@ test_xoauth2_LDADD = $(CMOCKA_LIBS) \
 # SMTP Command Parser
 
 test_smtp_cmd_SOURCES = test/smtp_cmd.c
-test_smtp_cmd_CFLAGS = -I$(top_srcdir)/src $(CMOCKA_FLAGS)
+test_smtp_cmd_CFLAGS = -I$(top_srcdir)/src $(CMOCKA_FLAGS) $(OPENSSL_CFLAGS)
 test_smtp_cmd_LDADD = $(CMOCKA_LIBS) \
 	src/oaproxy-xmalloc.$(OBJEXT) \
 	src/oaproxy-smtp_cmd.$(OBJEXT) \
@@ -76,7 +74,7 @@ test_smtp_cmd_LDADD = $(CMOCKA_LIBS) \
 # SMTP Server Reply Parser
 
 test_smtp_reply_SOURCES = test/smtp_reply.c
-test_smtp_reply_CFLAGS = -I$(top_srcdir)/src $(CMOCKA_FLAGS)
+test_smtp_reply_CFLAGS = -I$(top_srcdir)/src $(CMOCKA_FLAGS) $(OPENSSL_CFLAGS)
 test_smtp_reply_LDADD = $(CMOCKA_LIBS) \
 	src/oaproxy-xmalloc.$(OBJEXT) \
 	src/oaproxy-ssl.$(OBJEXT) \
