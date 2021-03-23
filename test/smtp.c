@@ -276,13 +276,24 @@ static bool write_data(int fd, const char *buf, size_t n) {
  *
  * @param ifd Input socket to write string to.
  * @param ofd Output socket to read string from.
+ * @param istr Input string to write.
+ * @param ostr Expected output string.
+ */
+#define test_proxy2(ifd, ofd, istr, ostr) {         \
+        char out[500];                              \
+        assert_write(ifd, (istr), strlen(istr));    \
+        assert_read(ofd, out, (ostr));              \
+    }
+
+/**
+ * Test that a given string written to an input socket is read from
+ * the output socket.
+ *
+ * @param ifd Input socket to write string to.
+ * @param ofd Output socket to read string from.
  * @param data String to write.
  */
-#define test_proxy(ifd, ofd, data) {                \
-        char out[500];                              \
-        assert_write(ifd, (data), strlen(data));    \
-        assert_read(ofd, out, (data));              \
-    }
+#define test_proxy(ifd, ofd, data) test_proxy2(ifd, ofd, data, data)
 
 
 /* Test simple forwarding */
@@ -313,12 +324,76 @@ static void test_simple_proxy(void ** state) {
 }
 
 
+/* Test AUTH Server Replies */
+
+static void test_auth_reply1(void ** state) {
+    struct test_state *tstate = *state;
+
+    // Write initial server reply
+
+    test_proxy(tstate->s_fd_in, tstate->c_fd_in, "220 smtp.example.com ESMTP\r\n");
+
+    // Write first client command
+
+    test_proxy(tstate->c_fd_in, tstate->s_fd_in, "EHLO local client\r\n");
+
+    // Write next server reply
+
+    test_proxy2(tstate->s_fd_in, tstate->c_fd_in,
+                "250-smtp.example.com pleased to meet you.\r\n"
+                "250-AUTH LOGIN DIGEST XOAUTH2\r\n"
+                "250 SIZE 35882577\r\n",
+
+                "250-smtp.example.com pleased to meet you.\r\n"
+                "250-AUTH PLAIN\r\n"
+                "250 SIZE 35882577\r\n"
+        )
+
+    // Write next client command
+
+    test_proxy(tstate->c_fd_in, tstate->s_fd_in, "QUIT\r\n");
+
+    // Check exit status
+    assert_int_equal(smtp_exit_status(tstate), 0);
+}
+
+static void test_auth_reply2(void ** state) {
+    struct test_state *tstate = *state;
+
+    // Write initial server reply
+
+    test_proxy(tstate->s_fd_in, tstate->c_fd_in, "220 smtp.example.com ESMTP\r\n");
+
+    // Write first client command
+
+    test_proxy(tstate->c_fd_in, tstate->s_fd_in, "EHLO local client\r\n");
+
+    // Write next server reply
+
+    test_proxy2(tstate->s_fd_in, tstate->c_fd_in,
+                "250-smtp.example.com pleased to meet you.\r\n"
+                "250 AUTH XOAUTH2\r\n",
+
+                "250-smtp.example.com pleased to meet you.\r\n"
+                "250 AUTH PLAIN\r\n"
+        )
+
+    // Write next client command
+
+    test_proxy(tstate->c_fd_in, tstate->s_fd_in, "QUIT\r\n");
+
+    // Check exit status
+    assert_int_equal(smtp_exit_status(tstate), 0);
+}
+
 /* Main Function */
 
 int main(void)
 {
     const struct CMUnitTest tests[] = {
-        smtp_cmd_unit_test(test_simple_proxy)
+        smtp_cmd_unit_test(test_simple_proxy),
+        smtp_cmd_unit_test(test_auth_reply1),
+        smtp_cmd_unit_test(test_auth_reply2)
     };
 
     return cmocka_run_group_tests(tests, NULL, NULL);
