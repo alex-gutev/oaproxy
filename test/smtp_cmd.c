@@ -248,8 +248,14 @@ static void test_data_state(void ** state) {
     struct test_state *tstate = *state;
 
     // Write EHLO command from client
-    char data[] = "Hello World.\n this is message data";
+    char data[] = "Hello World.\nthis is message data";
     size_t data_len = strlen(data);
+
+    const char *exp1 = "Hello World.\n";
+    size_t exp1_len = strlen(exp1);
+
+    const char *exp2 = "this is message data";
+    size_t exp2_len = strlen(exp2);
 
     if (write(tstate->c_fd, data, data_len) < data_len) {
         fail_msg("Error writing command to socket");
@@ -262,15 +268,24 @@ static void test_data_state(void ** state) {
     // Switch to data state
     smtp_cmd_stream_data_mode(tstate->stream, true);
 
-    // Read command
+    // Read first line
     struct smtp_cmd cmd;
     ssize_t n = smtp_cmd_next(tstate->stream, &cmd);
 
-    assert_int_equal(n, data_len);
+    assert_int_equal(n, exp1_len);
     assert_int_equal(cmd.command, SMTP_CMD);
 
-    assert_string_equal(cmd.line, data);
-    assert_int_equal(cmd.total_len, data_len);
+    assert_string_equal(cmd.line, exp1);
+    assert_int_equal(cmd.total_len, exp1_len);
+
+    // Read second line
+    n = smtp_cmd_next(tstate->stream, &cmd);
+
+    assert_int_equal(n, exp2_len);
+    assert_int_equal(cmd.command, SMTP_CMD);
+
+    assert_string_equal(cmd.line, exp2);
+    assert_int_equal(cmd.total_len, exp2_len);
 }
 static void test_data_state2(void ** state) {
     struct test_state *tstate = *state;
