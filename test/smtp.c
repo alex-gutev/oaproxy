@@ -620,12 +620,87 @@ static void test_auth_cmd_other(void ** state) {
     assert_int_equal(smtp_exit_status(tstate), 0);
 }
 
+
+/* DATA State */
+
+static void test_data1(void ** state) {
+    struct test_state *tstate = *state;
+
+    // Write initial server reply
+    test_proxy(tstate->s_fd_in, tstate->c_fd_in, "220 smtp.example.com ESMTP\r\n");
+
+    // Write first client command
+    test_proxy(tstate->c_fd_in, tstate->s_fd_in, "DATA\r\n");
+
+    // Write server data response
+    test_proxy(tstate->s_fd_in, tstate->c_fd_in, "354 Go ahead.\r\n");
+
+    // Write message data
+    test_proxy(tstate->c_fd_in, tstate->s_fd_in, "Subject: Just a test\r\nDear Bob,\n");
+
+    // Write auth command as part of data
+    // Should not be modified
+    test_proxy(tstate->c_fd_in, tstate->s_fd_in, "AUTH PLAIN AHVzZXIxQGV4YW1wbGUuY29tAA==\r\n");
+
+    // Write end of data
+    test_proxy(tstate->c_fd_in, tstate->s_fd_in, "\r\n.\r\n");
+
+    // Write response from server
+    test_proxy(tstate->s_fd_in, tstate->c_fd_in, "250 Message accepted for deliver\r\n");
+
+    // Write auth command.  This time should be modified as the state
+    // should be back in command mode.
+    test_proxy2(tstate->c_fd_in, tstate->s_fd_in,
+                "AUTH PLAIN AHVzZXIxQGV4YW1wbGUuY29tAA==\r\n",
+                "AUTH XOAUTH2 dXNlcj11c2VyMUBleGFtcGxlLmNvbQFhdXRoPUJlYXJlciB0b2t1c2VyMWFiYwEB\r\n");
+
+    // Check exit status
+    assert_int_equal(smtp_exit_status(tstate), 0);
+}
+
+static void test_data2(void ** state) {
+    struct test_state *tstate = *state;
+
+    // Write initial server reply
+    test_proxy(tstate->s_fd_in, tstate->c_fd_in, "220 smtp.example.com ESMTP\r\n");
+
+    // Write first client command
+    test_proxy(tstate->c_fd_in, tstate->s_fd_in, "DATA\r\n");
+
+    // Write server data response
+    test_proxy(tstate->s_fd_in, tstate->c_fd_in, "354 Go ahead.\r\n");
+
+    // Write message data
+    test_proxy(tstate->c_fd_in, tstate->s_fd_in, "Subject: Just a test\r\nDear Bob,\n");
+
+    // Write auth command as part of data
+    // Should not be modified
+    test_proxy(tstate->c_fd_in, tstate->s_fd_in, "AUTH PLAIN AHVzZXIxQGV4YW1wbGUuY29tAA==\r\n");
+
+    // Write end of data
+    test_proxy(tstate->c_fd_in, tstate->s_fd_in, "\r\n.\r\n");
+
+    // Write response from server
+    test_proxy(tstate->s_fd_in, tstate->c_fd_in, "554 Error accepting message\r\n");
+
+    // Write auth command.  This time should be modified as the state
+    // should be back in command mode.
+    test_proxy2(tstate->c_fd_in, tstate->s_fd_in,
+                "AUTH PLAIN AHVzZXIxQGV4YW1wbGUuY29tAA==\r\n",
+                "AUTH XOAUTH2 dXNlcj11c2VyMUBleGFtcGxlLmNvbQFhdXRoPUJlYXJlciB0b2t1c2VyMWFiYwEB\r\n");
+
+    // Check exit status
+    assert_int_equal(smtp_exit_status(tstate), 0);
+}
+
+
 /* Main Function */
 
 int main(void)
 {
     const struct CMUnitTest tests[] = {
         smtp_cmd_unit_test(test_simple_proxy),
+
         smtp_cmd_unit_test(test_auth_reply1),
         smtp_cmd_unit_test(test_auth_reply2),
 
@@ -636,7 +711,10 @@ int main(void)
         smtp_cmd_unit_test(test_auth_cmd5),
         smtp_cmd_unit_test(test_auth_cmd6),
         smtp_cmd_unit_test(test_auth_cmd7),
-        smtp_cmd_unit_test(test_auth_cmd_other)
+        smtp_cmd_unit_test(test_auth_cmd_other),
+
+        smtp_cmd_unit_test(test_data1),
+        smtp_cmd_unit_test(test_data2)
     };
 
     return cmocka_run_group_tests(tests, NULL, NULL);
