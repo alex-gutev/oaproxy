@@ -41,9 +41,9 @@ endif
 
 ## Testing
 
-check_PROGRAMS = test-b64 test-xoauth2 test-smtp_cmd test-smtp_reply test-smtp
+check_PROGRAMS = test-b64 test-xoauth2 test-smtp_cmd test-smtp_reply test-smtp test-imap-cmd
 
-TESTS = test-b64 test-xoauth2 test-smtp_cmd test-smtp_reply test-smtp
+TESTS = test-b64 test-xoauth2 test-smtp_cmd test-smtp_reply test-smtp test-imap-cmd
 
 # Base64 Encoding/Decoding Tests
 
@@ -99,3 +99,12 @@ test_smtp_LDADD = $(CMOCKA_LIBS) \
 test_smtp_LDFLAGS = -Wl,--wrap=server_connect \
 	-Wl,--wrap=find_goaccount \
 	-Wl,--wrap=get_access_token
+
+# IMAP Command Parser
+
+test_imap_cmd_SOURCES = test/imap_cmd.c
+test_imap_cmd_CFLAGS = -I$(top_srcdir)/src $(CMOCKA_FLAGS) $(OPENSSL_CFLAGS)
+test_imap_cmd_LDADD = $(CMOCKA_LIBS) \
+	src/oaproxy-xmalloc.$(OBJEXT) \
+	src/oaproxy-imap_cmd.$(OBJEXT) \
+	 $(OPENSSL_LIBS)
