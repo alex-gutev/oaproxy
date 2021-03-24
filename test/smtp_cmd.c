@@ -168,6 +168,30 @@ static void test_cmd_auth_plain(void ** state) {
     assert_string_equal(cmd.data, "\r\n");
     assert_int_equal(cmd.data_len, 0);
 }
+static void test_cmd_auth_plain_lower(void ** state) {
+    struct test_state *tstate = *state;
+
+    // Write EHLO command from client
+    char str_cmd[] = "auth plain\r\n";
+    size_t cmd_len = strlen(str_cmd);
+
+    if (write(tstate->c_fd, str_cmd, cmd_len) < cmd_len) {
+        fail_msg("Error writing command to socket");
+    }
+
+    // Read command
+    struct smtp_cmd cmd;
+    ssize_t n = smtp_cmd_next(tstate->stream, &cmd);
+
+    assert_int_equal(n, cmd_len);
+    assert_int_equal(cmd.command, SMTP_CMD_AUTH);
+
+    assert_string_equal(cmd.line, str_cmd);
+    assert_int_equal(cmd.total_len, cmd_len);
+
+    assert_string_equal(cmd.data, "\r\n");
+    assert_int_equal(cmd.data_len, 0);
+}
 static void test_cmd_auth_plain_data(void ** state) {
     struct test_state *tstate = *state;
 
@@ -326,6 +350,7 @@ int main(void) {
         smtp_cmd_unit_test(test_multi_cmd1),
         smtp_cmd_unit_test(test_multi_cmd2),
         smtp_cmd_unit_test(test_cmd_auth_plain),
+        smtp_cmd_unit_test(test_cmd_auth_plain_lower),
         smtp_cmd_unit_test(test_cmd_auth_plain_data),
         smtp_cmd_unit_test(test_cmd_malformed1),
         smtp_cmd_unit_test(test_cmd_malformed2),

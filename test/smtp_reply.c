@@ -280,6 +280,43 @@ static void test_reply_auth2(void ** state) {
     // Check last flag
     assert_true(reply.last);
 }
+static void test_reply_auth3(void ** state) {
+    struct test_state *tstate = *state;
+
+    // Write server identification reply
+    char str_reply[] = "250-auth plain\r\n";
+    size_t reply_len = strlen(str_reply);
+
+    if (write(tstate->s_fd, str_reply, reply_len) < reply_len) {
+        fail_msg("Error writing reply to socket");
+    }
+
+    // Read reply
+    struct smtp_reply reply;
+    ssize_t n = smtp_reply_next(tstate->stream, &reply);
+
+    assert_int_equal(n, reply_len);
+
+    // Check Lengths
+    assert_string_equal(reply.data, str_reply);
+    assert_int_equal(reply.total_len, reply_len);
+    assert_int_equal(reply.data_len, reply_len - 2);
+
+    // Parse
+    assert_true(smtp_reply_parse(&reply));
+
+    // Check code
+    assert_int_equal(reply.code, 250);
+
+    // Check type
+    assert_int_equal(reply.type, SMTP_REPLY_AUTH);
+
+    // Check message
+    assert_string_equal(reply.msg, "auth plain\r\n");
+
+    // Check last flag
+    assert_false(reply.last);
+}
 
 /* DATA Reply */
 
@@ -463,6 +500,7 @@ int main(void) {
         smtp_reply_unit_test(test_reply_multi2),
         smtp_reply_unit_test(test_reply_auth1),
         smtp_reply_unit_test(test_reply_auth2),
+        smtp_reply_unit_test(test_reply_auth3),
         smtp_reply_unit_test(test_reply_data),
         smtp_reply_unit_test(test_reply_malformed1),
         smtp_reply_unit_test(test_reply_malformed2),
