@@ -187,11 +187,15 @@ static int smtp_test_teardown(void ** state) {
  * @return Server status code.
  */
 static int smtp_exit_status(struct test_state *state) {
-    shutdown(state->c_fd_in, SHUT_RDWR);
-    shutdown(state->s_fd_in, SHUT_RDWR);
+    if (state->c_fd_in) {
+        shutdown(state->c_fd_in, SHUT_RDWR);
+        close(state->c_fd_in);
+    }
 
-    close(state->c_fd_in);
-    close(state->s_fd_in);
+    if (state->s_fd_in) {
+        shutdown(state->s_fd_in, SHUT_RDWR);
+        close(state->s_fd_in);
+    }
 
     state->c_fd_in = state->s_fd_in = -1;
 
@@ -694,6 +698,105 @@ static void test_data2(void ** state) {
 }
 
 
+/* Closing Socket */
+
+static void test_client_close1(void ** state) {
+    struct test_state *tstate = *state;
+
+    // Write initial server reply
+    test_proxy(tstate->s_fd_in, tstate->c_fd_in, "220 smtp.example.com ESMTP\r\n");
+
+    // Write client QUIT command
+    test_proxy(tstate->c_fd_in, tstate->s_fd_in, "QUIT\r\n");
+
+    // Close client socket
+    shutdown(tstate->c_fd_in, SHUT_RDWR);
+    close(tstate->c_fd_in);
+    tstate->c_fd_in = -1;
+
+    // Read from server socket
+    char buf[500];
+    assert_int_equal(read_data(tstate->s_fd_in, buf, sizeof(buf), sizeof(buf)), 0);
+
+    // Check exit status
+    assert_int_equal(smtp_exit_status(tstate), 0);
+}
+
+static void test_client_close2(void ** state) {
+    struct test_state *tstate = *state;
+
+    // Write initial server reply
+    test_proxy(tstate->s_fd_in, tstate->c_fd_in, "220 smtp.example.com ESMTP\r\n");
+
+    // Write client QUIT command
+    assert_write(tstate->c_fd_in, "QUIT", strlen("QUIT"));
+
+    // Close client socket
+    shutdown(tstate->c_fd_in, SHUT_RDWR);
+    close(tstate->c_fd_in);
+    tstate->c_fd_in = -1;
+
+    // Read from server socket
+    char buf[500];
+    assert_read(tstate->s_fd_in, buf, "QUIT");
+
+    // Check exit status
+    assert_int_equal(smtp_exit_status(tstate), 0);
+}
+
+static void test_server_close1(void ** state) {
+    struct test_state *tstate = *state;
+
+    // Write initial server reply
+    test_proxy(tstate->s_fd_in, tstate->c_fd_in, "220 smtp.example.com ESMTP\r\n");
+
+    // Write client QUIT command
+    test_proxy(tstate->c_fd_in, tstate->s_fd_in, "QUIT\r\n");
+
+    // Write server closing reply
+    test_proxy(tstate->s_fd_in, tstate->c_fd_in, "221 closing connection\r\n");
+
+    // Close server socket
+    shutdown(tstate->s_fd_in, SHUT_RDWR);
+    close(tstate->s_fd_in);
+    tstate->s_fd_in = -1;
+
+    // Read from client socket
+    char buf[500];
+    assert_int_equal(read_data(tstate->c_fd_in, buf, sizeof(buf), sizeof(buf)), 0);
+
+    // Check exit status
+    assert_int_equal(smtp_exit_status(tstate), 0);
+}
+
+static void test_server_close2(void ** state) {
+    struct test_state *tstate = *state;
+
+    // Write initial server reply
+    test_proxy(tstate->s_fd_in, tstate->c_fd_in, "220 smtp.example.com ESMTP\r\n");
+
+    // Write client QUIT command
+    test_proxy(tstate->c_fd_in, tstate->s_fd_in, "QUIT\r\n");
+
+    // Write server closing reply
+    const char *sreply = "221 closing connection";
+    size_t sreply_len = strlen(sreply);
+
+    assert_write(tstate->s_fd_in, sreply, sreply_len);
+
+    // Close server socket
+    shutdown(tstate->s_fd_in, SHUT_RDWR);
+    close(tstate->s_fd_in);
+    tstate->s_fd_in = -1;
+
+    // Read from client socket
+    char buf[500];
+    assert_read(tstate->c_fd_in, buf, sreply);
+
+    // Check exit status
+    assert_int_equal(smtp_exit_status(tstate), 0);
+}
+
 /* Main Function */
 
 int main(void)
@@ -714,7 +817,12 @@ int main(void)
         smtp_cmd_unit_test(test_auth_cmd_other),
 
         smtp_cmd_unit_test(test_data1),
-        smtp_cmd_unit_test(test_data2)
+        smtp_cmd_unit_test(test_data2),
+
+        smtp_cmd_unit_test(test_client_close1),
+        smtp_cmd_unit_test(test_client_close2),
+        smtp_cmd_unit_test(test_server_close1),
+        smtp_cmd_unit_test(test_server_close2)
     };
 
     return cmocka_run_group_tests(tests, NULL, NULL);
