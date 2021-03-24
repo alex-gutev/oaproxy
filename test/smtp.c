@@ -426,6 +426,37 @@ static void test_auth_reply2(void ** state) {
     assert_int_equal(smtp_exit_status(tstate), 0);
 }
 
+static void test_auth_reply3(void ** state) {
+    struct test_state *tstate = *state;
+
+    // Write initial server reply
+
+    test_proxy(tstate->s_fd_in, tstate->c_fd_in, "220 smtp.example.com ESMTP\r\n");
+
+    // Write first client command
+
+    test_proxy(tstate->c_fd_in, tstate->s_fd_in, "EHLO local client\r\n");
+
+    // Write next server reply
+
+    test_proxy2(tstate->s_fd_in, tstate->c_fd_in,
+                "250-smtp.example.com pleased to meet you.\r\n"
+                "250-auth login digest xoauth2\r\n"
+                "250 SIZE 35882577\r\n",
+
+                "250-smtp.example.com pleased to meet you.\r\n"
+                "250-AUTH PLAIN\r\n"
+                "250 SIZE 35882577\r\n"
+        )
+
+    // Write next client command
+
+    test_proxy(tstate->c_fd_in, tstate->s_fd_in, "QUIT\r\n");
+
+    // Check exit status
+    assert_int_equal(smtp_exit_status(tstate), 0);
+}
+
 
 /* Test AUTH Client Commands */
 
@@ -600,6 +631,34 @@ static void test_auth_cmd7(void ** state) {
     test_proxy2(tstate->c_fd_in, tstate->c_fd_in,
                 "AUTH PLAIN notbase64*&$\r\n",
                 "501 Syntax error in credentials\r\n");
+
+    // Write next client command
+
+    test_proxy(tstate->c_fd_in, tstate->s_fd_in, "QUIT\r\n");
+
+    // Check exit status
+    assert_int_equal(smtp_exit_status(tstate), 0);
+}
+
+static void test_auth_cmd8(void ** state) {
+    struct test_state *tstate = *state;
+
+    // Write initial server reply
+
+    test_proxy(tstate->s_fd_in, tstate->c_fd_in, "220 smtp.example.com ESMTP\r\n");
+
+    // Write auth command
+
+    // Credentials: \0user1@example.com\0
+
+    test_proxy2(tstate->c_fd_in, tstate->s_fd_in,
+                "auth plain AHVzZXIxQGV4YW1wbGUuY29tAA==\r\n",
+                "AUTH XOAUTH2 dXNlcj11c2VyMUBleGFtcGxlLmNvbQFhdXRoPUJlYXJlciB0b2t1c2VyMWFiYwEB\r\n");
+
+
+    // Write server response
+
+    test_proxy(tstate->s_fd_in, tstate->c_fd_in, "235 Accepted\r\n");
 
     // Write next client command
 
@@ -806,6 +865,7 @@ int main(void)
 
         smtp_cmd_unit_test(test_auth_reply1),
         smtp_cmd_unit_test(test_auth_reply2),
+        smtp_cmd_unit_test(test_auth_reply3),
 
         smtp_cmd_unit_test(test_auth_cmd1),
         smtp_cmd_unit_test(test_auth_cmd2),
@@ -814,6 +874,7 @@ int main(void)
         smtp_cmd_unit_test(test_auth_cmd5),
         smtp_cmd_unit_test(test_auth_cmd6),
         smtp_cmd_unit_test(test_auth_cmd7),
+        smtp_cmd_unit_test(test_auth_cmd8),
         smtp_cmd_unit_test(test_auth_cmd_other),
 
         smtp_cmd_unit_test(test_data1),
