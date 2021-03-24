@@ -209,28 +209,36 @@ close_cmd_stream:
 
 bool smtp_client_handle_cmd(struct smtp_cmd_stream *stream, BIO *s_bio) {
     struct smtp_cmd cmd;
-    ssize_t c_n = smtp_cmd_next(stream, &cmd);
 
-    if (c_n < 0) {
-        syslog(LOG_USER | LOG_ERR, "Error reading data from client: %m");
-        return false;
-    }
-    else if (c_n == 0) {
-        syslog(LOG_USER | LOG_NOTICE, "Client closed connection");
-        return false;
-    }
+    do {
+        ssize_t c_n = smtp_cmd_next(stream, &cmd);
 
-    switch (cmd.command) {
-    case SMTP_CMD_AUTH:
-        if (cmd.data_len == 0 && !smtp_get_credentials(stream, &cmd)) {
+        if (c_n < 0) {
+            syslog(LOG_USER | LOG_ERR, "Error reading data from client: %m");
+            return false;
+        }
+        else if (c_n == 0) {
+            syslog(LOG_USER | LOG_NOTICE, "Client closed connection");
             return false;
         }
 
-        return smtp_handle_auth(stream, s_bio, &cmd);
+        switch (cmd.command) {
+        case SMTP_CMD_AUTH:
+            if (cmd.data_len == 0 && !smtp_get_credentials(stream, &cmd)) {
+                return false;
+            }
 
-    default:
-        return smtp_server_send(s_bio, cmd.line, cmd.total_len);
-    }
+            if (!smtp_handle_auth(stream, s_bio, &cmd))
+                return false;
+
+            break;
+
+        default:
+            if (!smtp_server_send(s_bio, cmd.line, cmd.total_len))
+                return false;
+            break;
+        }
+    } while (smtp_cmd_stream_pending(stream));
 
     return true;
 }

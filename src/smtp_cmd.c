@@ -121,13 +121,16 @@ int smtp_cmd_stream_fd(struct smtp_cmd_stream *stream) {
     return BIO_get_fd(stream->bio, NULL);
 }
 
+bool smtp_cmd_stream_pending(struct smtp_cmd_stream *stream) {
+    return BIO_ctrl_pending(stream->bio) != 0;
+}
+
 void smtp_cmd_stream_data_mode(struct smtp_cmd_stream *stream, bool in_data) {
     stream->in_data = in_data;
 }
 
 ssize_t smtp_cmd_next(struct smtp_cmd_stream *stream, struct smtp_cmd *cmd) {
-    ssize_t n = stream->in_data ? BIO_read(stream->bio, stream->data, OAP_CMD_BUF_SIZE) :
-        BIO_gets(stream->bio, stream->data, OAP_CMD_BUF_SIZE);
+    ssize_t n = BIO_gets(stream->bio, stream->data, OAP_CMD_BUF_SIZE);
 
     if (n <= 0) {
         return n;

@@ -69,6 +69,18 @@ void smtp_cmd_stream_free(struct smtp_cmd_stream *stream);
 int smtp_cmd_stream_fd(struct smtp_cmd_stream *stream);
 
 /**
+ * Returns true if there is pending data in the stream.
+ *
+ * This does not mean there is a full command in the stream, and hence
+ * does not mean a call to smtp_cmd_next wont block.
+ *
+ * @param stream SMTP command stream.
+ *
+ * @return True if there is data in the stream.
+ */
+bool smtp_cmd_stream_pending(struct smtp_cmd_stream *stream);
+
+/**
  * Read and parse the next command from the command stream.
  *
  * @param stream SMTP command stream.
