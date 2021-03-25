@@ -201,6 +201,73 @@ static void test_imap_login2(void ** state) {
 }
 
 
+/* Malformed Commands */
+
+static void test_cmd_malformed1(void ** state) {
+    struct test_state *tstate = *state;
+
+    // Write CAPABILITY command from client
+    const char *str_cmd = "a001 CAPABILITY\n";
+    size_t cmd_len = strlen(str_cmd);
+
+    const char *tag = "a001";
+    size_t tag_len = strlen(tag);
+
+    // Write CAPABILITY command from client
+    assert_write(tstate->c_fd, str_cmd);
+
+    // Read command
+    struct imap_cmd cmd;
+    ssize_t n = imap_cmd_next(tstate->stream, &cmd, true);
+
+    // Check return value and command type
+    assert_int_equal(n, cmd_len);
+    assert_int_equal(cmd.command, IMAP_CMD);
+
+    // Check command line and length
+    assert_string_equal(cmd.line, str_cmd);
+    assert_int_equal(cmd.total_len, cmd_len);
+
+    // Check command tag
+    assert_int_equal(cmd.tag_len, tag_len);
+    assert_memory_equal(cmd.tag, tag, tag_len);
+}
+
+static void test_cmd_malformed2(void ** state) {
+    struct test_state *tstate = *state;
+
+    // Write CAPABILITY command from client
+    const char *str_cmd = "a001 CAPABILITY";
+    size_t cmd_len = strlen(str_cmd);
+
+    const char *tag = "a001";
+    size_t tag_len = strlen(tag);
+
+    // Write CAPABILITY command from client
+    assert_write(tstate->c_fd, str_cmd);
+
+    // Close to prevent read from blocking
+    close(tstate->c_fd);
+    tstate->c_fd = -1;
+
+    // Read command
+    struct imap_cmd cmd;
+    ssize_t n = imap_cmd_next(tstate->stream, &cmd, true);
+
+    // Check return value and command type
+    assert_int_equal(n, cmd_len);
+    assert_int_equal(cmd.command, IMAP_CMD);
+
+    // Check command line and length
+    assert_string_equal(cmd.line, str_cmd);
+    assert_int_equal(cmd.total_len, cmd_len);
+
+    // Check command tag
+    assert_int_equal(cmd.tag_len, tag_len);
+    assert_memory_equal(cmd.tag, tag, tag_len);
+}
+
+
 /* Parsing Functions */
 
 static void test_parse_string1(void ** state) {
@@ -229,6 +296,9 @@ int main(void) {
         imap_cmd_unit_test(test_imap_cap),
         imap_cmd_unit_test(test_imap_login1),
         imap_cmd_unit_test(test_imap_login2),
+
+        imap_cmd_unit_test(test_cmd_malformed1),
+        imap_cmd_unit_test(test_cmd_malformed2),
 
         cmocka_unit_test(test_parse_string1),
         cmocka_unit_test(test_parse_string2),
