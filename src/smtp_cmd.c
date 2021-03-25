@@ -138,7 +138,6 @@ ssize_t smtp_cmd_next(struct smtp_cmd_stream *stream, struct smtp_cmd *cmd) {
 
     // Add terminating NUL character in case reading data rather than
     // line
-    stream->data[n] = 0;
     stream->size = n;
 
     cmd->line = stream->data;
