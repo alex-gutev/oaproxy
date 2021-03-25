@@ -9,6 +9,8 @@
 #include <sys/types.h>
 #include <sys/socket.h>
 
+#include <openssl/bio.h>
+
 #include "xmalloc.h"
 
 #define OAP_CMD_BUF_SIZE 1024
@@ -17,31 +19,15 @@
 #define CMD_LOGIN_LEN 6
 
 struct imap_cmd_stream {
-    /** Socket File Descriptor */
-    int fd;
+    /** Client BIO stream */
+    BIO *bio;
 
     /** Size of last IMAP command line */
     size_t size;
 
-    /**
-     * Offset within the buffer to first byte of unprocessed data.
-     */
-    size_t offset;
-
     /** Buffer into which IMAP command is read */
     char data[OAP_CMD_BUF_SIZE + 1];
 };
-
-/**
- * Return the length of the next command in the data buffer.
- *
- * @param data Pointer to data buffer
- * @param sz Number of bytes in buffer
- *
- * @return Length of the buffer, or 0 if there isn't a complete
- *   command line in the buffer.
- */
-static size_t cmd_length(const char *data, size_t sz);
 
 /**
  * Parse an IMAP command.
@@ -85,87 +71,64 @@ static char * parse_quoted_str(const char *data, size_t n);
 
 /* Implementation */
 
-struct imap_cmd_stream * imap_cmd_stream_create(int fd) {
+struct imap_cmd_stream * imap_cmd_stream_create(int fd, bool close) {
+    // Create socket BIO
+    BIO *sbio = BIO_new_socket(fd, close);
+    if (!sbio) return NULL;
+
+    // Create Buffered BIO
+    BIO *bbio = BIO_new(BIO_f_buffer());
+    if (!bbio) goto free_sbio;
+
+    // Chain BIOs
+    BIO *chain = BIO_push(bbio, sbio);
+    if (!chain) goto free_bbio;
+
+    // Create stream struct
+
     struct imap_cmd_stream *stream = xmalloc(sizeof(struct imap_cmd_stream));
 
-    stream->fd = fd;
+    stream->bio = chain;
     stream->size = 0;
-    stream->offset = 0;
 
     return stream;
+
+free_bbio:
+    BIO_free_all(bbio);
+
+free_sbio:
+    BIO_free_all(sbio);
+
+    return NULL;
 }
 
 void imap_cmd_stream_free(struct imap_cmd_stream *stream) {
     assert(stream != NULL);
+
+    BIO_free_all(stream->bio);
     free(stream);
 }
 
 int imap_cmd_stream_fd(struct imap_cmd_stream *stream) {
-    return stream->fd;
+    return BIO_get_fd(stream->bio, NULL);
 }
 
 ssize_t imap_cmd_next(struct imap_cmd_stream *stream, struct imap_cmd *cmd, const bool wait) {
-    while (1) {
-        // Check if there is data left in the stream buffer
-        if (stream->offset < stream->size) {
-            size_t len = cmd_length(stream->data + stream->offset, stream->size - stream->offset);
+    if (!wait && !BIO_ctrl_pending(stream->bio))
+        return 0;
 
-            // If complete return command
-            if (len) {
-                cmd->line = stream->data + stream->offset;
-                cmd->total_len = len;
-
-                parse_cmd(cmd);
-
-                stream->offset += len;
-                return len;
-            }
-
-            // Move partial command to beginning of buffer
-            if (stream->offset) {
-                memmove(stream->data, stream->data + stream->offset, stream->size - stream->offset);
-                stream->size -= stream->offset;
-                stream->offset = 0;
-            }
-        }
-        else {
-            stream->offset = 0;
-            stream->size = 0;
-        }
-
-        if (!wait)
-            return 0;
-
-        // Read next block of data
-        ssize_t n = recv(stream->fd, stream->data + stream->size, OAP_CMD_BUF_SIZE - stream->size, 0);
-
-        if (n < 0) {
-            syslog(LOG_USER | LOG_ERR, "IMAP: Error reading command from client: %m");
-            return n;
-        }
-        else if (n == 0) {
-            syslog(LOG_USER | LOG_ERR, "IMAP client closed connection.");
-            return 0;
-        }
-
-        stream->size += n;
-    }
-}
-
-size_t cmd_length(const char *data, size_t sz) {
-    size_t total = 0;
-
-    while (sz--) {
-        char c = *data++;
-
-        if (sz && c == '\r' && *data == '\n') {
-            return total + 2;
-        }
-
-        total++;
+    ssize_t n = BIO_gets(stream->bio, stream->data, OAP_CMD_BUF_SIZE);
+    if (n <= 0) {
+        return n;
     }
 
-    return 0;
+    stream->size = n;
+
+    cmd->line = stream->data;
+    cmd->total_len = n;
+
+    parse_cmd(cmd);
+    return n;
 }
 
 bool parse_cmd(struct imap_cmd *cmd) {
@@ -184,12 +147,11 @@ bool parse_cmd(struct imap_cmd *cmd) {
 
 bool parse_tag(struct imap_cmd *cmd) {
     const char *data = cmd->line;
-    size_t n = cmd->total_len;
 
     cmd->tag = data;
     cmd->tag_len = 0;
 
-    while (n-- && *data != ' ') {
+    while (*data && *data != ' ') {
         if (!isalnum(*data++)) {
             return false;
         }
@@ -202,29 +164,45 @@ bool parse_tag(struct imap_cmd *cmd) {
 
 bool parse_cmd_name(struct imap_cmd *cmd) {
     const char *data = cmd->tag + cmd->tag_len;
-    size_t n = cmd->total_len - cmd->tag_len;
 
-    while (n && *data == ' ') {
-        n--;
+    while (*data && *data == ' ') {
         data++;
     };
 
     if (strncasecmp(CMD_LOGIN, data, CMD_LOGIN_LEN) == 0) {
         cmd->command = IMAP_CMD_LOGIN;
         cmd->param = data + CMD_LOGIN_LEN;
-        cmd->param_len = n - 2 - CMD_LOGIN_LEN;
+        cmd->param_len = ((cmd->line + cmd->total_len) - cmd->param) - 2;
     }
 
     return true;
 }
 
-const char *imap_cmd_buffer(struct imap_cmd_stream *stream, size_t *size) {
-    if (stream->offset < stream->size) {
-        *size = stream->size - stream->offset;
-        return stream->data + stream->offset;
+ssize_t imap_cmd_buffer(struct imap_cmd_stream *stream, char *buf, size_t size) {
+    size_t pending = BIO_ctrl_pending(stream->bio);
+
+    if (pending < size) {
+        size = pending;
     }
 
-    return NULL;
+    size_t total = 0;
+
+    while (size) {
+        ssize_t n = BIO_read(stream->bio, buf, size);
+
+        if (n < 0) {
+            return n;
+        }
+        else if (n == 0) {
+            break;
+        }
+
+        size -= n;
+        total += n;
+        buf += n;
+    }
+
+    return total;
 }
 
 /* Parsing Strings */

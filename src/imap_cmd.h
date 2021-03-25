@@ -47,11 +47,14 @@ struct imap_cmd {
 /**
  * Create an IMAP command stream.
  *
- * @param fd IMAP Client socket file descriptor
+ * @param fd IMAP Client socket file descriptor.
+ *
+ * @param close True if the socket file descriptor should be closed
+ *   when the stream is freed.
  *
  * @return Pointer to imap_cmd_stream struct
  */
-struct imap_cmd_stream * imap_cmd_stream_create(int fd);
+struct imap_cmd_stream * imap_cmd_stream_create(int fd, bool close);
 
 /**
  * Free the memory held by an IMAP command stream.
@@ -87,17 +90,16 @@ ssize_t imap_cmd_next(struct imap_cmd_stream *stream, struct imap_cmd *cmd, cons
 int imap_cmd_stream_fd(struct imap_cmd_stream *stream);
 
 /**
- * Return the remaining data in the stream's buffer.
+ * Read the remaining data in the buffer.
  *
- * @param stream IMAP command stream.
+ * @param stream IMAP command stream
+ * @param buf    Buffer into which to read data
+ * @param size   Size of buffer
  *
- * @param size Pointer to size_t which will receive the size of the
- *   buffer.
- *
- * @return Pointer to the buffer. NULL if there is no unprocessed data
- *   in the buffer.
+ * @return Number of bytes written to @a buf if successful. -1
+ *   Otherwise.
  */
-const char *imap_cmd_buffer(struct imap_cmd_stream *stream, size_t *size);
+ssize_t imap_cmd_buffer(struct imap_cmd_stream *stream, char *buf, size_t size);
 
 /**
  * Parse a string from an IMAP command parameter.

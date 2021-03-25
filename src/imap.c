@@ -50,6 +50,18 @@
 static bool imap_authenticate(int c_fd, BIO * s_bio, int s_fd);
 
 /**
+ * Forward the remaining data in the client command stream's buffer to
+ * the server.
+ *
+ * @param stream Client command stream
+ * @param s_bio Server BIO object
+ *
+ * @return True if all the data in the stream was forwarded
+ *   successfully.
+ */
+static bool send_client_buf_data(struct imap_cmd_stream *stream, BIO *s_bio);
+
+/**
  * Handle a command from the client.
  *
  * @param stream IMAP command stream
@@ -180,24 +192,9 @@ static bool imap_client_send(int fd, const char *data, size_t n);
 /* Implementation */
 
 void imap_handle_client(int c_fd, const char *host) {
-    SSL_CTX *ctx = SSL_CTX_new(SSLv23_client_method());
-    if (ctx == NULL) {
-        ssl_log_error("IMAP: Error creating SSL context");
+    BIO *bio = server_connect(host);
+    if (!bio) {
         goto close_client;
-    }
-
-    BIO *bio = BIO_new_ssl_connect(ctx);
-    SSL *ssl;
-
-    BIO_get_ssl(bio, &ssl);
-    SSL_set_mode(ssl, SSL_MODE_AUTO_RETRY);
-
-    BIO_set_conn_hostname(bio, host);
-
-    if (BIO_do_connect(bio) <= 0) {
-        syslog(LOG_USER | LOG_ERR, "IMAP: Error connecting to SMTP host: %s", host);
-        ssl_log_error(NULL);
-        goto close_server;
     }
 
     int s_fd = BIO_get_fd(bio, NULL);
@@ -268,13 +265,13 @@ close_client:
 bool imap_authenticate(int c_fd, BIO * s_bio, int s_fd) {
     bool succ = true;
 
-    struct imap_cmd_stream *c_stream = imap_cmd_stream_create(c_fd);
+    struct imap_cmd_stream *c_stream = imap_cmd_stream_create(c_fd, false);
     struct imap_reply_stream *s_stream = imap_reply_stream_create(s_bio);
 
     int maxfd = c_fd < s_fd ? s_fd : c_fd;
 
-    size_t c_n, s_n;
-    const char *c_data, *s_data;
+    size_t s_n;
+    const char *s_data;
 
     while (1) {
         fd_set rfds;
@@ -312,10 +309,9 @@ bool imap_authenticate(int c_fd, BIO * s_bio, int s_fd) {
 
 finish:
     // Send remaining client data in buffer to server
-    c_data = imap_cmd_buffer(c_stream, &c_n);
-
-    if (c_data) {
-        succ = imap_server_send(s_bio, c_data, c_n);
+    if (!send_client_buf_data(c_stream, s_bio)) {
+        succ = false;
+        goto close;
     }
 
     // Send remaining server relies in buffer to client
@@ -330,6 +326,22 @@ close:
     imap_reply_stream_free(s_stream);
     imap_cmd_stream_free(c_stream);
     return succ;
+}
+
+bool send_client_buf_data(struct imap_cmd_stream *stream, BIO *s_bio) {
+    char buf[1024];
+
+    ssize_t n;
+
+    while ((n = imap_cmd_buffer(stream, buf, sizeof(buf)))) {
+        if (n < 0)
+            return false;
+
+        if (!imap_server_send(s_bio, buf, n))
+            return false;
+    }
+
+    return true;
 }
 
 

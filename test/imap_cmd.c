@@ -72,7 +72,7 @@ static int imap_test_setup(void ** state) {
 
     tstate->c_fd = sv[0];
 
-    tstate->stream = imap_cmd_stream_create(sv[1]);
+    tstate->stream = imap_cmd_stream_create(sv[1], true);
     if (!tstate->stream) {
         close(sv[0]);
         close(sv[1]);
