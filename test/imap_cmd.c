@@ -128,7 +128,43 @@ static void test_imap_cap(void ** state) {
     assert_memory_equal(cmd.tag, tag, tag_len);
 }
 
-static void test_imap_login(void ** state) {
+static void test_imap_login1(void ** state) {
+    struct test_state *tstate = *state;
+
+    const char *str_cmd = "1 LOGIN user2@mail.com password\r\n";
+    size_t cmd_len = strlen(str_cmd);
+
+    const char *tag = "1";
+    size_t tag_len = strlen(tag);
+
+    const char *param = "user2@mail.com password\r\n";
+    size_t param_len = strlen(param) - 2;
+
+    // Write LOGIN command from client
+    assert_write(tstate->c_fd, str_cmd);
+
+    // Read command
+    struct imap_cmd cmd;
+    ssize_t n = imap_cmd_next(tstate->stream, &cmd, true);
+
+    // Check return value and command type
+    assert_int_equal(n, cmd_len);
+    assert_int_equal(cmd.command, IMAP_CMD_LOGIN);
+
+    // Check command line and length
+    assert_int_equal(cmd.total_len, cmd_len);
+    assert_string_equal(cmd.line, str_cmd);
+
+    // Check command tag
+    assert_int_equal(cmd.tag_len, tag_len);
+    assert_memory_equal(cmd.tag, tag, tag_len);
+
+    // Check command parameters
+    assert_int_equal(cmd.param_len, param_len);
+    assert_string_equal(cmd.param, param);
+}
+
+static void test_imap_login2(void ** state) {
     struct test_state *tstate = *state;
 
     const char *str_cmd = "tag2 login user@example.com pass123\r\n";
@@ -191,7 +227,8 @@ static void test_parse_string3(void ** state) {
 int main(void) {
     const struct CMUnitTest tests[] = {
         imap_cmd_unit_test(test_imap_cap),
-        imap_cmd_unit_test(test_imap_login),
+        imap_cmd_unit_test(test_imap_login1),
+        imap_cmd_unit_test(test_imap_login2),
 
         cmocka_unit_test(test_parse_string1),
         cmocka_unit_test(test_parse_string2),
