@@ -228,7 +228,7 @@ char * imap_parse_string(const char *data, size_t n) {
         if (c <= 0x1f || c == 0x7f ||
             c == '(' || c == ')' || c == '{' ||
             c == '%' || c == '*' || c == '"' ||
-            c == '\\' || c == ' ')
+            c == '\\' || isspace(c))
             break;
 
         if (index >= buf_size) {
