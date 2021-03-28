@@ -201,6 +201,73 @@ static void test_imap_login2(void ** state) {
 }
 
 
+/* Multiple Commands */
+
+static void test_cmd_multi1(void ** state) {
+    struct test_state *tstate = *state;
+
+    const char *str_cmd = "a001 CMD1\r\n"
+        "a002 CMD2\r\n";
+
+    const char *exp_cmd = "a001 CMD1\r\n";
+    size_t exp_len = strlen(exp_cmd);
+
+    const char *tag = "a001";
+    size_t tag_len = strlen(tag);
+
+    // Write CAPABILITY command from client
+    assert_write(tstate->c_fd, str_cmd);
+
+    // Read command
+    struct imap_cmd cmd;
+    ssize_t n = imap_cmd_next(tstate->stream, &cmd, true);
+
+    // Check return value and command type
+    assert_int_equal(n, exp_len);
+    assert_int_equal(cmd.command, IMAP_CMD);
+
+    // Check command line and length
+    assert_string_equal(cmd.line, exp_cmd);
+    assert_int_equal(cmd.total_len, exp_len);
+
+    // Check command tag
+    assert_int_equal(cmd.tag_len, tag_len);
+    assert_memory_equal(cmd.tag, tag, tag_len);
+}
+
+static void test_cmd_multi2(void ** state) {
+    struct test_state *tstate = *state;
+
+    const char *str_cmd = "a001 CMD1\r\n"
+        "a002 CMD2\r\n";
+
+    const char *exp_cmd = "a002 CMD2\r\n";
+    size_t exp_len = strlen(exp_cmd);
+
+    const char *tag = "a002";
+    size_t tag_len = strlen(tag);
+
+    // Write CAPABILITY command from client
+    assert_write(tstate->c_fd, str_cmd);
+
+    // Read command
+    struct imap_cmd cmd;
+    ssize_t n = imap_cmd_next(tstate->stream, &cmd, true);
+    n = imap_cmd_next(tstate->stream, &cmd, true);
+
+    // Check return value and command type
+    assert_int_equal(n, exp_len);
+    assert_int_equal(cmd.command, IMAP_CMD);
+
+    // Check command line and length
+    assert_string_equal(cmd.line, exp_cmd);
+    assert_int_equal(cmd.total_len, exp_len);
+
+    // Check command tag
+    assert_int_equal(cmd.tag_len, tag_len);
+    assert_memory_equal(cmd.tag, tag, tag_len);
+}
+
 /* Malformed Commands */
 
 static void test_cmd_malformed1(void ** state) {
@@ -296,6 +363,9 @@ int main(void) {
         imap_cmd_unit_test(test_imap_cap),
         imap_cmd_unit_test(test_imap_login1),
         imap_cmd_unit_test(test_imap_login2),
+
+        imap_cmd_unit_test(test_cmd_multi1),
+        imap_cmd_unit_test(test_cmd_multi2),
 
         imap_cmd_unit_test(test_cmd_malformed1),
         imap_cmd_unit_test(test_cmd_malformed2),
