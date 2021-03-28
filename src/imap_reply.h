@@ -100,14 +100,13 @@ ssize_t imap_reply_next(struct imap_reply_stream *stream, struct imap_reply *rep
 /**
  * Return the remaining data in the stream's buffer.
  *
- * @param stream IMAP reply stream.
+ * @param stream IMAP reply stream
+ * @param buf    Buffer into which to read data
+ * @param size   Size of buffer
  *
- * @param size Pointer to size_t which will receive the size of the
- *   buffer.
- *
- * @return Pointer to the buffer. NULL if there is no unprocessed data
- *   in the buffer.
+ * @return Number of bytes written to @a bug if successful. -1
+ *   otheriwse.
  */
-const char *imap_reply_buffer(struct imap_reply_stream *stream, size_t *size);
+ssize_t imap_reply_buffer(struct imap_reply_stream *stream, char *buf, size_t size);
 
 #endif /* OAPROXY_IMAP_REPLY_H */

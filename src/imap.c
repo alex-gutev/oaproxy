@@ -62,6 +62,18 @@ static bool imap_authenticate(int c_fd, BIO * s_bio, int s_fd);
 static bool send_client_buf_data(struct imap_cmd_stream *stream, BIO *s_bio);
 
 /**
+ * Forward the remaining data in the server reply stream's buffer to
+ * the client.
+ *
+ * @param stream Server reply stream
+ * @param c_fd   Client socket file descriptor
+ *
+ * @return True if all the data in the stream was forwarded
+ *   successfully.
+ */
+static bool send_server_buf_data(struct imap_reply_stream *stream, int c_fd);
+
+/**
  * Handle a command from the client.
  *
  * @param stream IMAP command stream
@@ -266,12 +278,17 @@ bool imap_authenticate(int c_fd, BIO * s_bio, int s_fd) {
     bool succ = true;
 
     struct imap_cmd_stream *c_stream = imap_cmd_stream_create(c_fd, false);
+    if (!c_stream) {
+        return false;
+    }
+
     struct imap_reply_stream *s_stream = imap_reply_stream_create(s_bio);
+    if (!s_stream) {
+        succ = false;
+        goto close_cmd_stream;
+    }
 
     int maxfd = c_fd < s_fd ? s_fd : c_fd;
-
-    size_t s_n;
-    const char *s_data;
 
     while (1) {
         fd_set rfds;
@@ -315,15 +332,12 @@ finish:
     }
 
     // Send remaining server relies in buffer to client
-
-    s_data = imap_reply_buffer(s_stream, &s_n);
-
-    if (s_data) {
-        succ = imap_client_send(c_fd, s_data, s_n);
-    }
+    succ = send_server_buf_data(s_stream, c_fd);
 
 close:
     imap_reply_stream_free(s_stream);
+
+close_cmd_stream:
     imap_cmd_stream_free(c_stream);
     return succ;
 }
@@ -338,6 +352,22 @@ bool send_client_buf_data(struct imap_cmd_stream *stream, BIO *s_bio) {
             return false;
 
         if (!imap_server_send(s_bio, buf, n))
+            return false;
+    }
+
+    return true;
+}
+
+bool send_server_buf_data(struct imap_reply_stream *stream, int c_fd) {
+    char buf[1024];
+
+    ssize_t n;
+
+    while ((n = imap_reply_buffer(stream, buf, sizeof(buf)))) {
+        if (n < 0)
+            return false;
+
+        if (!imap_client_send(c_fd, buf, n))
             return false;
     }
 

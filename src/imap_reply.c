@@ -19,23 +19,10 @@ struct imap_reply_stream {
 
     /** Size of data in buffer */
     size_t size;
-    /** Offset within buffer to first unprocessed byte */
-    size_t offset;
 
     /** Data Buffer */
     char data[OAP_REPLY_BUF_SIZE];
 };
-
-/**
- * Return the length of the next reply in the data buffer.
- *
- * @param data Pointer to data buffer
- * @param sz Number of bytes in buffer
- *
- * @return Length of the line, or 0 if there isn't a complete line in
- *    the buffer.
- */
-static size_t reply_length(const char *data, size_t n);
 
 /**
  * Parse an IMAP reply.
@@ -80,84 +67,48 @@ static bool parse_reply_code(struct imap_reply *reply);
 /* Implementation */
 
 struct imap_reply_stream * imap_reply_stream_create(BIO *bio) {
+    // Create Buffered BIO
+    BIO *bbio = BIO_new(BIO_f_buffer());
+    if (!bbio) return NULL;
+
+    // Chain BIOs
+    BIO *chain = BIO_push(bbio, bio);
+    if (!chain) {
+        BIO_free_all(bbio);
+        return NULL;
+    }
+
     struct imap_reply_stream *stream = xmalloc(sizeof(struct imap_reply_stream));
 
-    stream->bio = bio;
-
+    stream->bio = chain;
     stream->size = 0;
-    stream->offset = 0;
 
     return stream;
 }
 
 void imap_reply_stream_free(struct imap_reply_stream *stream) {
     assert(stream != NULL);
+
+    BIO_free(stream->bio);
     free(stream);
 }
 
 ssize_t imap_reply_next(struct imap_reply_stream *stream, struct imap_reply *reply, const bool wait) {
-    while (1) {
-        if (stream->offset < stream->size) {
-            size_t len = reply_length(stream->data + stream->offset, stream->size - stream->offset);
+    if (!wait && !BIO_ctrl_pending(stream->bio))
+        return 0;
 
-            // If complete reply
-            if (reply) {
-                reply->line = stream->data + stream->offset;
-                reply->total_len = len;
-
-                parse_reply(reply);
-
-                stream->offset += len;
-                return len;
-            }
-
-            // Move partial reply to beginning of buffer
-            if (stream->offset) {
-                memmove(stream->data, stream->data + stream->offset, stream->size - stream->offset);
-                stream->size -= stream->offset;
-                stream->offset = 0;
-            }
-        }
-        else {
-            stream->offset = 0;
-            stream->size = 0;
-        }
-
-        if (!wait)
-            return 0;
-
-        // Read next block of data
-        ssize_t n = BIO_read(stream->bio, stream->data + stream->size, OAP_REPLY_BUF_SIZE - stream->size);
-
-        if (n < 0) {
-            syslog(LOG_USER | LOG_ERR, "IMAP: Error reading reply from server: %m");
-            return n;
-        }
-        else if (n == 0) {
-            syslog(LOG_USER | LOG_ERR, "IMAP: server closed connection.");
-            return 0;
-        }
-
-        stream->size += n;
+    ssize_t n = BIO_gets(stream->bio, stream->data, OAP_REPLY_BUF_SIZE);
+    if (n <= 0) {
+        return n;
     }
 
-    return 0;
-}
+    stream->size = n;
 
-size_t reply_length(const char *data, size_t n) {
-    size_t total = 0;
+    reply->line = stream->data;
+    reply->total_len = n;
 
-    while (n--) {
-        char c = *data++;
-
-        if (n && c == '\r' && *data == '\n') {
-            return total + 2;
-        }
-
-        total++;
-    }
-
-    return 0;
+    parse_reply(reply);
+    return n;
 }
 
 /* Parsing */
@@ -241,11 +192,29 @@ bool parse_reply_code(struct imap_reply *reply) {
 
 /* Accessors */
 
-const char *imap_reply_buffer(struct imap_reply_stream *stream, size_t *size) {
-    if (stream->offset < stream->size) {
-        *size = stream->size - stream->offset;
-        return stream->data + stream->offset;
+ssize_t imap_reply_buffer(struct imap_reply_stream *stream, char *buf, size_t size) {
+    size_t pending = BIO_ctrl_pending(stream->bio);
+
+    if (pending < size) {
+        size = pending;
     }
 
-    return NULL;
+    size_t total = 0;
+
+    while (size) {
+        ssize_t n = BIO_read(stream->bio, buf, size);
+
+        if (n < 0) {
+            return n;
+        }
+        else if (n == 0) {
+            break;
+        }
+
+        size -= n;
+        total += n;
+        buf += n;
+    }
+
+    return total;
 }
