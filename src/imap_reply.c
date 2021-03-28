@@ -182,11 +182,12 @@ bool parse_reply_type(struct imap_reply *reply) {
             reply->tag_len = 1;
             reply->type = IMAP_REPLY_UNTAGGED;
         }
-        else if (reply->line[1] == '+') {
+        else if (reply->line[0] == '+') {
             reply->tag_len = 1;
             reply->type = IMAP_REPLY_CONT;
         }
         else {
+            reply->type = IMAP_REPLY_TAGGED;
             return parse_reply_tag(reply);
         }
 
