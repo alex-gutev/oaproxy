@@ -362,6 +362,103 @@ static void test_reply_capability2(void ** state) {
 }
 
 
+/* Malformed Replies */
+
+static void test_reply_malformed1(void ** state) {
+    struct test_state *tstate = *state;
+
+    const char *str_reply = "* OK imap ready for requests from localhost\n";
+    size_t reply_len = strlen(str_reply);
+
+    // Write reply
+    assert_write(tstate->s_fd, str_reply);
+
+    // Read reply
+    struct imap_reply reply;
+    ssize_t n = imap_reply_next(tstate->stream, &reply, true);
+
+    // Check length
+    assert_int_equal(n, reply_len);
+
+    // Check reply code
+    assert_int_equal(reply.code, IMAP_REPLY);
+
+    // Check reply type
+    assert_int_equal(reply.type, IMAP_REPLY_UNTAGGED);
+
+    // Check reply
+    assert_int_equal(reply.total_len, n);
+    assert_string_equal(reply.line, str_reply);
+
+    // Check tag length
+    assert_int_equal(reply.tag_len, 1);
+}
+
+static void test_reply_malformed2(void ** state) {
+    struct test_state *tstate = *state;
+
+    const char *str_reply = "* OK imap ready for requests from localhost";
+    size_t reply_len = strlen(str_reply);
+
+    // Write reply
+    assert_write(tstate->s_fd, str_reply);
+
+    // Close to prevent read from blocking
+    close(tstate->s_fd);
+    tstate->s_fd = -1;
+
+    // Read reply
+    struct imap_reply reply;
+    ssize_t n = imap_reply_next(tstate->stream, &reply, true);
+
+    // Check length
+    assert_int_equal(n, reply_len);
+
+    // Check reply code
+    assert_int_equal(reply.code, IMAP_REPLY);
+
+    // Check reply type
+    assert_int_equal(reply.type, IMAP_REPLY_UNTAGGED);
+
+    // Check reply
+    assert_int_equal(reply.total_len, n);
+    assert_string_equal(reply.line, str_reply);
+
+    // Check tag length
+    assert_int_equal(reply.tag_len, 1);
+}
+
+static void test_reply_malformed3(void ** state) {
+    struct test_state *tstate = *state;
+
+    const char *str_reply = "badreply\r\n";
+    size_t reply_len = strlen(str_reply);
+
+    // Write reply
+    assert_write(tstate->s_fd, str_reply);
+
+    // Read reply
+    struct imap_reply reply;
+    ssize_t n = imap_reply_next(tstate->stream, &reply, true);
+
+    // Check length
+    assert_int_equal(n, reply_len);
+
+    // Check reply code
+    assert_int_equal(reply.code, IMAP_REPLY);
+
+    // Check reply type
+    assert_int_equal(reply.type, IMAP_REPLY_TAGGED);
+
+    // Check reply
+    assert_int_equal(reply.total_len, n);
+    assert_string_equal(reply.line, str_reply);
+
+    // Check tag length
+    assert_int_equal(reply.tag_len, reply_len - 2);
+}
+
+
 /* Main Function */
 
 int main(void) {
@@ -374,7 +471,11 @@ int main(void) {
         imap_reply_unit_test(test_reply_multi2),
 
         imap_reply_unit_test(test_reply_capability1),
-        imap_reply_unit_test(test_reply_capability2)
+        imap_reply_unit_test(test_reply_capability2),
+
+        imap_reply_unit_test(test_reply_malformed1),
+        imap_reply_unit_test(test_reply_malformed2),
+        imap_reply_unit_test(test_reply_malformed3),
     };
 
     return cmocka_run_group_tests(tests, NULL, NULL);
