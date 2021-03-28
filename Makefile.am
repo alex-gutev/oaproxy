@@ -41,9 +41,9 @@ endif
 
 ## Testing
 
-check_PROGRAMS = test-b64 test-xoauth2 test-smtp_cmd test-smtp_reply test-smtp test-imap-cmd
+check_PROGRAMS = test-b64 test-xoauth2 test-smtp_cmd test-smtp_reply test-smtp test-imap-cmd test-imap-reply
 
-TESTS = test-b64 test-xoauth2 test-smtp_cmd test-smtp_reply test-smtp test-imap-cmd
+TESTS = test-b64 test-xoauth2 test-smtp_cmd test-smtp_reply test-smtp test-imap-cmd test-imap-reply
 
 # Base64 Encoding/Decoding Tests
 
@@ -107,4 +107,13 @@ test_imap_cmd_CFLAGS = -I$(top_srcdir)/src $(CMOCKA_FLAGS) $(OPENSSL_CFLAGS)
 test_imap_cmd_LDADD = $(CMOCKA_LIBS) \
 	src/oaproxy-xmalloc.$(OBJEXT) \
 	src/oaproxy-imap_cmd.$(OBJEXT) \
+	 $(OPENSSL_LIBS)
+
+# IMAP Reply Parser
+
+test_imap_reply_SOURCES = test/imap_reply.c
+test_imap_reply_CFLAGS = -I$(top_srcdir)/src $(CMOCKA_FLAGS) $(OPENSSL_CFLAGS)
+test_imap_reply_LDADD = $(CMOCKA_LIBS) \
+	src/oaproxy-xmalloc.$(OBJEXT) \
+	src/oaproxy-imap_reply.$(OBJEXT) \
 	 $(OPENSSL_LIBS)
