@@ -211,13 +211,90 @@ static void test_reply_cont(void ** state) {
     assert_int_equal(reply.tag_len, 1);
 }
 
+
+/* Multi-line Tests */
+
+static void test_reply_multi1(void ** state) {
+    struct test_state *tstate = *state;
+
+    const char *str_reply = "* BYE server terminating connection\r\n"
+        "abcd OK LOGOUT completed\r\n";
+
+    const char *exp_reply = "* BYE server terminating connection\r\n";
+    size_t exp_len = strlen(exp_reply);
+
+    // Write reply
+    assert_write(tstate->s_fd, str_reply);
+
+    // Read reply
+    struct imap_reply reply;
+    ssize_t n = imap_reply_next(tstate->stream, &reply, true);
+
+    // Check length
+    assert_int_equal(n, exp_len);
+
+    // Check reply code
+    assert_int_equal(reply.code, IMAP_REPLY);
+
+    // Check reply type
+    assert_int_equal(reply.type, IMAP_REPLY_UNTAGGED);
+
+    // Check reply
+    assert_int_equal(reply.total_len, n);
+    assert_string_equal(reply.line, exp_reply);
+
+    // Check tag length
+    assert_int_equal(reply.tag_len, 1);
+}
+
+static void test_reply_multi2(void ** state) {
+    struct test_state *tstate = *state;
+
+    const char *str_reply = "* BYE server terminating connection\r\n"
+        "abcd OK LOGOUT completed\r\n";
+
+    const char *exp_reply = "abcd OK LOGOUT completed\r\n";
+    size_t exp_len = strlen(exp_reply);
+
+    const char *tag = "a123";
+    size_t tag_len = strlen(tag);
+
+    // Write reply
+    assert_write(tstate->s_fd, str_reply);
+
+    // Read reply
+    struct imap_reply reply;
+    ssize_t n = imap_reply_next(tstate->stream, &reply, true);
+    n = imap_reply_next(tstate->stream, &reply, true);
+
+    // Check length
+    assert_int_equal(n, exp_len);
+
+    // Check reply code
+    assert_int_equal(reply.code, IMAP_REPLY);
+
+    // Check reply type
+    assert_int_equal(reply.type, IMAP_REPLY_TAGGED);
+
+    // Check reply
+    assert_int_equal(reply.total_len, n);
+    assert_string_equal(reply.line, exp_reply);
+
+    // Check tag length
+    assert_int_equal(reply.tag_len, tag_len);
+}
+
+
 /* Main Function */
 
 int main(void) {
     const struct CMUnitTest tests[] = {
         imap_reply_unit_test(test_reply_untagged),
         imap_reply_unit_test(test_reply_tagged),
-        imap_reply_unit_test(test_reply_cont)
+        imap_reply_unit_test(test_reply_cont),
+
+        imap_reply_unit_test(test_reply_multi1),
+        imap_reply_unit_test(test_reply_multi2)
     };
 
     return cmocka_run_group_tests(tests, NULL, NULL);
