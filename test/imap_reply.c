@@ -285,6 +285,83 @@ static void test_reply_multi2(void ** state) {
 }
 
 
+/* Capability Replies */
+
+static void test_reply_capability1(void ** state) {
+    struct test_state *tstate = *state;
+
+    const char *str_reply = "* CAPABILITY UNSELECT IDLE NAMESPACE AUTH=PLAIN AUTH=XOAUTH2\r\n";
+    size_t reply_len = strlen(str_reply);
+
+    const char *reply_data = "UNSELECT IDLE NAMESPACE AUTH=PLAIN AUTH=XOAUTH2\r\n";
+    size_t data_len = strlen(reply_data);
+
+    // Write reply
+    assert_write(tstate->s_fd, str_reply);
+
+    // Read reply
+    struct imap_reply reply;
+    ssize_t n = imap_reply_next(tstate->stream, &reply, true);
+
+    // Check length
+    assert_int_equal(n, reply_len);
+
+    // Check reply code
+    assert_int_equal(reply.code, IMAP_REPLY_CAP);
+
+    // Check reply type
+    assert_int_equal(reply.type, IMAP_REPLY_UNTAGGED);
+
+    // Check reply
+    assert_int_equal(reply.total_len, n);
+    assert_string_equal(reply.line, str_reply);
+
+    // Check tag length
+    assert_int_equal(reply.tag_len, 1);
+
+    // Check reply data
+    assert_int_equal(reply.data_len, data_len - 2);
+    assert_string_equal(reply.data, reply_data);
+}
+
+static void test_reply_capability2(void ** state) {
+    struct test_state *tstate = *state;
+
+    const char *str_reply = "* capability UNSELECT IDLE NAMESPACE AUTH=PLAIN AUTH=XOAUTH2\r\n";
+    size_t reply_len = strlen(str_reply);
+
+    const char *reply_data = "UNSELECT IDLE NAMESPACE AUTH=PLAIN AUTH=XOAUTH2\r\n";
+    size_t data_len = strlen(reply_data);
+
+    // Write reply
+    assert_write(tstate->s_fd, str_reply);
+
+    // Read reply
+    struct imap_reply reply;
+    ssize_t n = imap_reply_next(tstate->stream, &reply, true);
+
+    // Check length
+    assert_int_equal(n, reply_len);
+
+    // Check reply code
+    assert_int_equal(reply.code, IMAP_REPLY_CAP);
+
+    // Check reply type
+    assert_int_equal(reply.type, IMAP_REPLY_UNTAGGED);
+
+    // Check reply
+    assert_int_equal(reply.total_len, n);
+    assert_string_equal(reply.line, str_reply);
+
+    // Check tag length
+    assert_int_equal(reply.tag_len, 1);
+
+    // Check reply data
+    assert_int_equal(reply.data_len, data_len - 2);
+    assert_string_equal(reply.data, reply_data);
+}
+
+
 /* Main Function */
 
 int main(void) {
@@ -294,7 +371,10 @@ int main(void) {
         imap_reply_unit_test(test_reply_cont),
 
         imap_reply_unit_test(test_reply_multi1),
-        imap_reply_unit_test(test_reply_multi2)
+        imap_reply_unit_test(test_reply_multi2),
+
+        imap_reply_unit_test(test_reply_capability1),
+        imap_reply_unit_test(test_reply_capability2)
     };
 
     return cmocka_run_group_tests(tests, NULL, NULL);
