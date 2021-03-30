@@ -15,8 +15,8 @@
 
 #define OAP_CMD_BUF_SIZE 1024
 
-#define CMD_LOGIN "LOGIN "
-#define CMD_LOGIN_LEN 6
+#define CMD_LOGIN "LOGIN"
+#define CMD_LOGIN_LEN strlen(CMD_LOGIN)
 
 struct imap_cmd_stream {
     /** Client BIO stream */
@@ -169,9 +169,16 @@ bool parse_cmd_name(struct imap_cmd *cmd) {
         data++;
     };
 
-    if (strncasecmp(CMD_LOGIN, data, CMD_LOGIN_LEN) == 0) {
+    if (strncasecmp(CMD_LOGIN, data, CMD_LOGIN_LEN) == 0 &&
+        isspace(data[CMD_LOGIN_LEN])) {
         cmd->command = IMAP_CMD_LOGIN;
-        cmd->param = data + CMD_LOGIN_LEN;
+
+        data += CMD_LOGIN_LEN;
+        while (*data && *data == ' ') {
+            data++;
+        }
+
+        cmd->param = data;
         cmd->param_len = ((cmd->line + cmd->total_len) - cmd->param) - 2;
     }
 
