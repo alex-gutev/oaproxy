@@ -5,6 +5,7 @@
 #include <stdbool.h>
 #include <syslog.h>
 #include <stdio.h>
+#include <ctype.h>
 #include <assert.h>
 
 #include <sys/types.h>
@@ -162,6 +163,27 @@ static bool handle_server_reply(struct imap_reply_stream *stream, int c_fd);
  *   was an error sending/receiving data.
  */
 static bool send_capabilites(int c_fd, const struct imap_reply *reply);
+
+/**
+ * Filter a portion of a CAPABILITY response.
+ *
+ * AUTH methods and the LOGINDISABLED capability are
+ * skipped. Remaining capabilities are copied to the output buffer.
+ *
+ * @param data Pointer to the capability to filter.
+ *
+ * @param n Pointer to variable storing number of remaining bytes in
+ *   response string. Updated on output.
+ *
+ * @param out Output buffer to which capability is written. Must be at
+ *   least as large as the length of the capability response.
+ *
+ * @param pos Pointer to variable storing position within output
+ *   buffer at which to write next byte. Updated on output.
+ *
+ * @return Pointer to the first byte following the current capability.
+ */
+static const char * filter_capability(const char *data, size_t *n, char *out, size_t *pos);
 
 /**
  * Skip past the current bytes in the data buffer until one byte past
@@ -578,23 +600,7 @@ bool send_capabilites(int c_fd, const struct imap_reply *reply) {
     memcpy(new_cap, reply->line, pos);
 
     while (n) {
-        if ((*data == 'A' || *data == 'a') &&
-            strncasecmp(data, IMAP_CAP_AUTH, IMAP_CAP_AUTH_LEN) == 0) {
-            data = skip_to_space(data, &n);
-            continue;
-        }
-        else if ((*data == 'L' || *data == 'l') &&
-                 strncasecmp(data, IMAP_CAP_LOGINDISABLED, IMAP_CAP_LOGINDISABLED_LEN) &&
-                 (data[IMAP_CAP_LOGINDISABLED_LEN] == ' ' ||
-                  data[IMAP_CAP_LOGINDISABLED_LEN] == '\r')) {
-            data = skip_to_space(data, &n);
-            continue;
-        }
-
-        new_cap[pos++] = *data;
-        data++;
-        n--;
-
+        data = filter_capability(data, &n, new_cap, &pos);
     }
 
     new_cap[pos++] = '\r';
@@ -606,12 +612,42 @@ bool send_capabilites(int c_fd, const struct imap_reply *reply) {
     return ret;
 }
 
+static const char * filter_capability(const char *data, size_t *n, char *out, size_t *pos) {
+    // Skip space
+
+    size_t i = *pos;
+    while (*n && isspace(*data)) {
+        out[i++] = *data;
+        data++;
+        *n = *n - 1;
+    }
+
+    if ((*data == 'A' || *data == 'a') &&
+        strncasecmp(data, IMAP_CAP_AUTH, IMAP_CAP_AUTH_LEN) == 0) {
+        return skip_to_space(data, n);
+    }
+    else if ((*data == 'L' || *data == 'l') &&
+             strncasecmp(data, IMAP_CAP_LOGINDISABLED, IMAP_CAP_LOGINDISABLED_LEN) == 0 &&
+             isspace(data[IMAP_CAP_LOGINDISABLED_LEN])) {
+        return skip_to_space(data, n);
+    }
+    else if (*n) {
+        while (*n && !isspace(*data)) {
+            out[i++] = *data;
+            data++;
+            *n = *n - 1;
+        }
+
+        *pos = i;
+    }
+
+    return data;
+}
+
 const char *skip_to_space(const char *data, size_t *n) {
     size_t sz = *n;
     while (sz && *data != '\r' && *data != '\n') {
         if (*data == ' ') {
-            sz--;
-            data++;
             break;
         }
 
