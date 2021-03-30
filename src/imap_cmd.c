@@ -215,6 +215,10 @@ ssize_t imap_cmd_buffer(struct imap_cmd_stream *stream, char *buf, size_t size) 
 /* Parsing Strings */
 
 char * imap_parse_string(const char *data, size_t n) {
+    if (n == 0) {
+        return NULL;
+    }
+
     // Skip whitespace
     while (n && *data == ' ') {
         n--;
@@ -229,7 +233,7 @@ char * imap_parse_string(const char *data, size_t n) {
     size_t buf_size = 255, index = 0;
     char *str_buf = xmalloc(buf_size);
 
-    while (n--) {
+    while (n) {
         char c = *data++;
 
         if (c <= 0x1f || c == 0x7f ||
@@ -244,6 +248,7 @@ char * imap_parse_string(const char *data, size_t n) {
         }
 
         str_buf[index++] = c;
+        n--;
     }
 
     str_buf = xrealloc(str_buf, index + 1);
