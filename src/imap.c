@@ -248,7 +248,7 @@ void imap_handle_client(int c_fd, const char *host) {
         int retval = select(maxfd+1, &rfds, NULL, NULL, NULL);
 
         if (retval < 0) {
-            syslog(LOG_USER | LOG_ERR, "IMAP: select() error: %m");
+            syslog(LOG_ERR, "IMAP: select() error: %m");
             break;
         }
 
@@ -261,7 +261,7 @@ void imap_handle_client(int c_fd, const char *host) {
                 break;
             }
             else if (s_n == 0) {
-                syslog(LOG_USER | LOG_ERR, "IMAP: Server closed connection");
+                syslog(LOG_NOTICE, "IMAP: Server closed connection");
                 break;
             }
 
@@ -275,11 +275,11 @@ void imap_handle_client(int c_fd, const char *host) {
             size_t c_n = recv(c_fd, c_data, sizeof(c_data), 0);
 
             if (c_n < 0) {
-                syslog(LOG_USER | LOG_ERR, "IMAP: Error sending data to client: %m");
+                syslog(LOG_ERR, "IMAP: Error sending data to client: %m");
                 break;
             }
             else if (c_n == 0) {
-                syslog(LOG_USER | LOG_ERR, "IMAP: Client closed connection");
+                syslog(LOG_NOTICE, "IMAP: Client closed connection");
                 break;
             }
 
@@ -322,7 +322,7 @@ bool imap_authenticate(int c_fd, BIO * s_bio, int s_fd) {
         int retval = select(maxfd+1, &rfds, NULL, NULL, NULL);
 
         if (retval < 0) {
-            syslog(LOG_USER | LOG_ERR, "IMAP: select() error: %m");
+            syslog(LOG_ERR, "IMAP: select() error: %m");
             succ = false;
             goto close;
         }
@@ -445,7 +445,7 @@ int imap_login(int c_fd, BIO * s_bio, const struct imap_cmd *cmd) {
     GList *account = find_goaccount(accounts, user);
 
     if (!account) {
-        syslog(LOG_USER | LOG_WARNING, "IMAP: Could not find GNOME Online Account for username %s", user);
+        syslog(LOG_WARNING, "IMAP: Could not find GNOME Online Account for username %s", user);
 
         ret = imap_invalid_user(c_fd, tag) ? 0 : -1;
         goto free_user;
@@ -461,7 +461,7 @@ int imap_login(int c_fd, BIO * s_bio, const struct imap_cmd *cmd) {
 
     char *resp = xoauth2_make_client_response(user, token);
     if (!resp) {
-        syslog(LOG_USER | LOG_ERR, "IMAP: Error formatting SASL client response mechanism: %m");
+        syslog(LOG_ERR, "IMAP: Error formatting SASL client response mechanism: %m");
         ret = -1;
 
         goto free_token;
@@ -469,7 +469,7 @@ int imap_login(int c_fd, BIO * s_bio, const struct imap_cmd *cmd) {
 
     char *auth_cmd;
     if (asprintf(&auth_cmd, "%s AUTHENTICATE XOAUTH2 %s\r\n", tag, resp) == -1) {
-        syslog(LOG_USER | LOG_ERR, "asprintf error (formatting IMAP AUTHENTICATE command): %m");
+        syslog(LOG_ERR, "IMAP: asprintf error (formatting AUTHENTICATE command): %m");
         ret = -1;
         goto free_resp;
     }
@@ -505,7 +505,7 @@ free_tag:
 bool imap_invalid_user(int fd, const char *tag) {
     char *err;
     if (asprintf(&err, "%s NO Invalid username\r\n", tag) == -1) {
-        syslog(LOG_USER | LOG_ERR, "asprintf (format IMAP LOGIN response): %m");
+        syslog(LOG_ERR, "IMAP: asprintf (format LOGIN response): %m");
         return false;
     }
 
@@ -519,7 +519,7 @@ bool imap_auth_error(int fd, goa_error gerr, const char *tag) {
     case ACCOUNT_ERROR_CRED: {
         char *err;
         if (asprintf(&err, "%s NO Account not authorized for IMAP\r\n", tag) == -1) {
-            syslog(LOG_USER | LOG_ERR, "asprintf (format IMAP LOGIN response): %m");
+            syslog(LOG_ERR, "IMAP: asprintf (format LOGIN response): %m");
             return false;
         }
 
@@ -531,7 +531,7 @@ bool imap_auth_error(int fd, goa_error gerr, const char *tag) {
     case ACCOUNT_ERROR_TOKEN: {
         char *err;
         if (asprintf(&err, "%s NO Error obtaining access token", tag) == -1) {
-            syslog(LOG_USER | LOG_ERR, "asprintf (format IMAP LOGIN response): %m");
+            syslog(LOG_ERR, "IMAP: asprintf (format LOGIN response): %m");
             return false;
         }
 
@@ -548,7 +548,7 @@ bool imap_auth_error(int fd, goa_error gerr, const char *tag) {
 bool imap_login_syntax_error(int fd, const char *tag) {
     char *err;
     if (asprintf(&err, "%s BAD Syntax error in username\r\n", tag) == -1) {
-        syslog(LOG_USER | LOG_ERR, "asprintf (format IMAP LOGIN response): %m");
+        syslog(LOG_ERR, "IMAP: asprintf (format LOGIN response): %m");
         return false;
     }
 
@@ -683,7 +683,7 @@ bool imap_client_send(int fd, const char *data, size_t n) {
         ssize_t c_n = send(fd, data, n, 0) ;
 
         if (c_n < 0) {
-            syslog(LOG_USER | LOG_ERR, "IMAP: Error sending data to client: %m");
+            syslog(LOG_ERR, "IMAP: Error sending data to client: %m");
             return false;
         }
 

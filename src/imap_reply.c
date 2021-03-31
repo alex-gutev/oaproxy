@@ -3,7 +3,6 @@
 #include <stdbool.h>
 #include <string.h>
 #include <ctype.h>
-#include <syslog.h>
 #include <assert.h>
 
 #include "xmalloc.h"

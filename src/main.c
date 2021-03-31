@@ -24,7 +24,7 @@ int main(int argc, char *argv[])
     struct proxy_server *servers = parse_servers(conf, &n_servers);
 
     if (!servers) {
-        syslog(LOG_USER | LOG_ERR, "Could not parse server settings from config file: %s", argv[1]);
+        syslog(LOG_ERR, "Could not parse server settings from config file: %s", argv[1]);
         return 1;
     }
 

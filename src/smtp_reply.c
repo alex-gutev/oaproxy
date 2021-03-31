@@ -2,7 +2,6 @@
 
 #include <string.h>
 #include <ctype.h>
-#include <syslog.h>
 #include <assert.h>
 
 #include "ssl.h"

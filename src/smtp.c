@@ -184,7 +184,7 @@ void smtp_handle_client(int c_fd, const char *host) {
         int retval = select(maxfd+1, &rfds, NULL, NULL, NULL);
 
         if (retval < 0) {
-            syslog(LOG_USER | LOG_ERR, "select() error: %m");
+            syslog(LOG_ERR, "SMTP: select() error: %m");
             break;
         }
 
@@ -214,11 +214,11 @@ bool smtp_client_handle_cmd(struct smtp_cmd_stream *stream, BIO *s_bio) {
         ssize_t c_n = smtp_cmd_next(stream, &cmd);
 
         if (c_n < 0) {
-            syslog(LOG_USER | LOG_ERR, "Error reading data from client: %m");
+            syslog(LOG_ERR, "SMTP: Error reading data from client: %m");
             return false;
         }
         else if (c_n == 0) {
-            syslog(LOG_USER | LOG_NOTICE, "Client closed connection");
+            syslog(LOG_NOTICE, "SMTP: Client closed connection");
             return false;
         }
 
@@ -276,7 +276,7 @@ bool smtp_handle_auth(struct smtp_cmd_stream *stream, BIO *s_bio, const struct s
         succ = smtp_auth_client(smtp_cmd_stream_fd(stream), s_bio, account, user);
     }
     else {
-        syslog(LOG_USER | LOG_WARNING, "Could not find GNOME Online Account for username %s", user);
+        syslog(LOG_WARNING, "SMTP: Could not find GNOME Online Account for username %s", user);
 
         char err[] = "535 Invalid username or password\r\n";
         succ = smtp_client_send(smtp_cmd_stream_fd(stream), err, strlen(err));
@@ -330,7 +330,7 @@ bool smtp_auth_client(int fd, BIO *bio, GList *account, const char *user) {
     char *resp = xoauth2_make_client_response(user, token);
 
     if (!resp) {
-        syslog(LOG_USER | LOG_ERR, "Error formatting SASL client response mechanism: %m");
+        syslog(LOG_ERR, "SMTP: Error formatting SASL client response mechanism: %m");
         succ = false;
 
         goto free_token;
@@ -338,7 +338,7 @@ bool smtp_auth_client(int fd, BIO *bio, GList *account, const char *user) {
 
     char *auth_cmd;
     if (asprintf(&auth_cmd, "AUTH XOAUTH2 %s\r\n", resp) == -1) {
-        syslog(LOG_USER | LOG_ERR, "asprintf error (formatting SMTP AUTH command): %m");
+        syslog(LOG_ERR, "SMTP: asprintf error (formatting AUTH command): %m");
         succ = false;
         goto free_resp;
     }
@@ -398,7 +398,7 @@ bool smtp_client_send(int fd, const char *data, size_t n) {
         ssize_t c_n = send(fd, data, n, 0) ;
 
         if (c_n < 0) {
-            syslog(LOG_USER | LOG_ERR, "Error sending data to client: %m");
+            syslog(LOG_ERR, "SMTP: Error sending data to client: %m");
             return false;
         }
 

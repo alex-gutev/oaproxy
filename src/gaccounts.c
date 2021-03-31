@@ -37,7 +37,7 @@ gchar *get_access_token(GList *account, goa_error *gerr) {
 
     if (!goa_account_call_ensure_credentials_sync(acc, NULL, NULL, &error)) {
         *gerr = ACCOUNT_ERROR_CRED;
-        syslog(LOG_ERR | LOG_USER, "Could not verify gnome online account credentials: %s", error->message);
+        syslog(LOG_ERR, "Could not verify gnome online account credentials: %s", error->message);
 
         g_error_free(error);
         return NULL;
@@ -55,7 +55,7 @@ gchar *get_access_token(GList *account, goa_error *gerr) {
             access_token = NULL;
             *gerr = ACCOUNT_ERROR_TOKEN;
 
-            syslog(LOG_ERR | LOG_USER, "Error obtaining OAUTH2 object for gnome online account");
+            syslog(LOG_ERR, "Error obtaining OAUTH2 object for gnome online account");
         }
 
         g_clear_object(&oauth2);

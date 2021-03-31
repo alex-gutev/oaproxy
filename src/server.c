@@ -122,7 +122,7 @@ struct proxy_server *parse_servers(const char *path, size_t *n) {
     FILE *f = fopen(path, "r");
 
     if (!f) {
-        syslog(LOG_USER | LOG_ERR, "Error opening configuration file '%s': %m", path);
+        syslog(LOG_ERR, "Error opening configuration file '%s': %m", path);
         return NULL;
     }
 
@@ -141,7 +141,7 @@ struct proxy_server *parse_servers(const char *path, size_t *n) {
         }
 
         if (!parse_line(servers + num, line)) {
-            syslog(LOG_USER | LOG_ERR, "Config Parse Error: Error parsing line %lu", line_i);
+            syslog(LOG_ERR, "Error parsing line %lu of configuration file '%s'", line_i, path);
             continue;
         }
 
@@ -187,7 +187,7 @@ const char * parse_type(const char *line, server_type *type) {
         return line + STR_SMTP_LEN;
     }
 
-    syslog(LOG_USER | LOG_ERR, "Error parsing server type in: %s", line);
+    syslog(LOG_ERR, "Error parsing server type in: %s", line);
     return NULL;
 }
 
@@ -198,7 +198,7 @@ const char * parse_port(const char *line, unsigned long *port) {
 
     assert(end);
     if (*end && !isspace(*end)) {
-        syslog(LOG_USER | LOG_ERR, "Error parsing port at: %s", line);
+        syslog(LOG_ERR, "Error parsing port at: %s", line);
         return NULL;
     }
 
@@ -217,7 +217,7 @@ char * parse_host(const char *line) {
     }
 
     if (!n) {
-        syslog(LOG_USER | LOG_ERR, "Config Parse Error: Empty Host");
+        syslog(LOG_ERR, "Config Parse Error: Empty Host");
         return NULL;
     }
 
@@ -245,7 +245,7 @@ bool open_server_sock(struct proxy_server *server, int port) {
     server->sock_fd = socket(AF_INET, SOCK_STREAM, 0);
 
     if (server->sock_fd < 0) {
-        syslog(LOG_USER | LOG_ERR, "Error opening socket: %m");
+        syslog(LOG_ERR, "Error opening socket: %m");
         goto error;
     }
 
@@ -254,12 +254,12 @@ bool open_server_sock(struct proxy_server *server, int port) {
     s_addr.sin_port = htons(port);
 
     if (bind(server->sock_fd, (struct sockaddr *)&s_addr, sizeof(s_addr))) {
-        syslog(LOG_USER | LOG_ERR, "Error binding to port %d: %m", port);
+        syslog(LOG_ERR, "Error binding to port %d: %m", port);
         goto error;
     }
 
     if (listen(server->sock_fd, SOMAXCONN)) {
-        syslog(LOG_USER | LOG_ERR, "Error listening for incoming connections on port %d: %m", port);
+        syslog(LOG_ERR, "Error listening for incoming connections on port %d: %m", port);
         goto error;
     }
 
@@ -293,7 +293,7 @@ void run_servers(struct proxy_server *servers, size_t n) {
         int retval = select(maxfd+1, &rfds, NULL, NULL, NULL);
 
         if (retval < 0) {
-            syslog(LOG_USER | LOG_ERR, "SMTP: select() error: %m");
+            syslog(LOG_ERR, "Server socket select() error: %m");
             break;
         }
 
@@ -307,13 +307,13 @@ void handle_accept(const fd_set *rfds, struct proxy_server *servers, size_t n) {
             int clientfd = accept(servers[i].sock_fd, NULL, NULL);
 
             if (clientfd < 0) {
-                syslog(LOG_USER | LOG_ERR, "Error accepting client connection: %m");
+                syslog(LOG_ERR, "Error accepting client connection: %m");
                 continue;
             }
 
             struct proxy_client *client = malloc(sizeof(struct proxy_client));
             if (!client) {
-                syslog(LOG_USER | LOG_CRIT, "Memory allocation failed");
+                syslog(LOG_CRIT, "Memory allocation failed");
                 close(clientfd);
                 continue;
             }
@@ -324,7 +324,7 @@ void handle_accept(const fd_set *rfds, struct proxy_server *servers, size_t n) {
             pthread_t thread;
 
             if (pthread_create(&thread, NULL, handle_client, client)) {
-                syslog(LOG_USER | LOG_ERR, "Error creating new client thread: %m");
+                syslog(LOG_ERR, "Error creating new client thread: %m");
 
                 close(clientfd);
                 free(client);
@@ -338,7 +338,7 @@ void * handle_client(void *obj) {
     GError *error = NULL;
 
     if (!get_goaclient(&error)) {
-        syslog(LOG_ERR | LOG_USER, "Could not create GoaClient: %s", error->message);
+        syslog(LOG_CRIT, "Could not create GoaClient: %s", error->message);
 
         close(client->fd);
         goto end;

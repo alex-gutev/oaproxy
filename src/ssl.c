@@ -27,12 +27,12 @@ void destroy_ssl(void) {
 }
 
 void ssl_log_error(const char *msg) {
-    if (msg) syslog(LOG_USER | LOG_ERR, "%s", msg);
+    if (msg) syslog(LOG_ERR, "%s", msg);
     ERR_print_errors_cb(ssl_log_error_cb, NULL);
 }
 
 int ssl_log_error_cb(const char *str, size_t len, void *u) {
-    syslog(LOG_USER | LOG_ERR, "SSL Error: %s", str);
+    syslog(LOG_ERR, "SSL Error: %s", str);
     return 0;
 }
 
@@ -58,13 +58,13 @@ BIO *server_connect(const char *host) {
     SSL_set_mode(ssl, SSL_MODE_AUTO_RETRY);
 
     if (!BIO_set_conn_hostname(bio, host)) {
-        syslog(LOG_USER | LOG_ERR, "Error setting host: %s", host);
+        syslog(LOG_ERR, "Error setting host: %s", host);
         ssl_log_error(NULL);
         goto free_bio;
     }
 
     if (BIO_do_connect(bio) <= 0) {
-        syslog(LOG_USER | LOG_ERR, "Error connecting to host: %s", host);
+        syslog(LOG_ERR, "Error connecting to host: %s", host);
         ssl_log_error(NULL);
         goto free_bio;
     }

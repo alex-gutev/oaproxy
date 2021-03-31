@@ -7,7 +7,7 @@ void *xmalloc(size_t n) {
     void *p = malloc(n);
 
     if (!p) {
-        syslog(LOG_USER | LOG_CRIT, "Error allocating memory");
+        syslog(LOG_CRIT, "Error allocating memory");
         abort();
     }
 
@@ -18,7 +18,7 @@ void *xrealloc(void *ptr, size_t size) {
     ptr = realloc(ptr, size);
 
     if (!ptr) {
-        syslog(LOG_USER | LOG_CRIT, "Error reallocating memory");
+        syslog(LOG_CRIT, "Error reallocating memory");
         abort();
     }
 
