@@ -41,9 +41,9 @@ endif
 
 ## Testing
 
-check_PROGRAMS = test-b64 test-xoauth2 test-smtp_cmd test-smtp_reply test-smtp test-imap-cmd test-imap-reply test-imap
+check_PROGRAMS = test-b64 test-xoauth2 test-smtp_cmd test-smtp_reply test-smtp test-imap-cmd test-imap-reply test-imap test-server
 
-TESTS = test-b64 test-xoauth2 test-smtp_cmd test-smtp_reply test-smtp test-imap-cmd test-imap-reply test-imap
+TESTS = test-b64 test-xoauth2 test-smtp_cmd test-smtp_reply test-smtp test-imap-cmd test-imap-reply test-imap test-server
 
 # Base64 Encoding/Decoding Tests
 
@@ -136,3 +136,29 @@ test_imap_LDADD = $(CMOCKA_LIBS) \
 test_imap_LDFLAGS = -Wl,--wrap=server_connect \
 	-Wl,--wrap=find_goaccount \
 	-Wl,--wrap=get_access_token
+
+
+# Server Config Parser
+
+test_server_SOURCES = test/server.c
+test_server_CFLAGS = -I$(top_srcdir)/src $(CMOCKA_FLAGS) $(PTHREAD_CFLAGS) \
+	-DCONF_TEST_DIR='"${top_srcdir}/test/conf/"'
+
+test_server_LDADD = $(CMOCKA_LIBS) \
+	src/oaproxy-xmalloc.$(OBJEXT) \
+	src/oaproxy-ssl.$(OBJEXT) \
+	src/oaproxy-b64.$(OBJEXT) \
+	src/oaproxy-gaccounts.$(OBJEXT) \
+	src/oaproxy-xoauth2.$(OBJEXT) \
+	src/oaproxy-smtp_cmd.$(OBJEXT) \
+	src/oaproxy-smtp_reply.$(OBJEXT) \
+	src/oaproxy-smtp.$(OBJEXT) \
+	src/oaproxy-imap_cmd.$(OBJEXT) \
+	src/oaproxy-imap_reply.$(OBJEXT) \
+	src/oaproxy-imap.$(OBJEXT) \
+	src/oaproxy-server.$(OBJEXT) \
+	$(OPENSSL_LIBS) $(GOA_LIBS) $(PTHREAD_LIBS)
+
+test_server_LDFLAGS = -Wl,--wrap=socket \
+	-Wl,--wrap=bind \
+	-Wl,--wrap=listen
