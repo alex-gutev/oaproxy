@@ -10,17 +10,29 @@ oaproxy_CFLAGS = $(PTHREAD_CFLAGS) $(GOA_CFLAGS) $(OPENSSL_CFLAGS) -DSYSCONFDIR=
 
 oaproxy_SOURCES = src/main.c \
 	src/xmalloc.c \
+	src/xmalloc.h \
 	src/b64.c \
+	src/b64.h \
 	src/xoauth2.c \
+	src/xoauth2.h \
 	src/ssl.c \
+	src/ssl.h \
 	src/gaccounts.c \
+	src/gaccounts.h \
 	src/smtp.c \
+	src/smtp.h \
 	src/smtp_reply.c \
+	src/smtp_reply.h \
 	src/smtp_cmd.c \
+	src/smtp_cmd.h \
 	src/imap.c \
+	src/imap.h \
 	src/imap_cmd.c \
+	src/imap_cmd.h \
 	src/imap_reply.c \
-	src/server.c
+	src/imap_reply.h \
+	src/server.c \
+	src/server.h
 
 
 ## Configuration file
@@ -38,6 +50,8 @@ if HAVE_SYSTEMD
 systemduserunit_DATA = oaproxy.service
 endif
 
+CLEANFILES = oaproxy.service
+EXTRA_DIST = README.md oaproxy.service.in
 
 ## Testing
 
@@ -162,3 +176,8 @@ test_server_LDADD = $(CMOCKA_LIBS) \
 test_server_LDFLAGS = -Wl,--wrap=socket \
 	-Wl,--wrap=bind \
 	-Wl,--wrap=listen
+
+EXTRA_DIST += test/conf/test1.conf \
+	test/conf/test2.conf \
+	test/conf/test3.conf \
+	test/conf/test4.conf
