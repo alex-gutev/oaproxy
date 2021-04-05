@@ -1,5 +1,5 @@
 # Initialization
-AC_INIT([oaproxy], [0.1.0], [alex.gutev@mail.bg])
+AC_INIT([oaproxy], [0.2.0], [alex.gutev@mail.bg])
 AC_CONFIG_SRCDIR([src/main.c])
 AM_INIT_AUTOMAKE([-Wall foreign subdir-objects])
 AM_SILENT_RULES([yes])
