@@ -173,3 +173,8 @@ The username should be changed to the username corresponding to the
 Gnome Online account, this is generally the full email address. The
 password is currently not used or checked by OAProxy thus can be left
 blank or filled with a dummy password.
+
+# Legal
+
+This product includes software developed by the OpenSSL Project for
+use in the OpenSSL Toolkit. (http://www.openssl.org/)
